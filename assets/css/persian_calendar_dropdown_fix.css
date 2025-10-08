@@ -1,0 +1,90 @@
+/* رفع مشکل display: none در منوها */
+.dropdown-menu.inner {
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* بازنشانی استایل‌های مخرب */
+div.inner.open {
+  overflow: visible !important;
+  min-height: auto !important;
+  max-height: none !important;
+}
+
+/* رفع مشکل لایه‌بندی */
+div.inner.open {
+  z-index: 9999 !important;
+  position: relative !important;
+}
+
+/* بازنشانی استایل‌های متن */
+.dropdown-menu li a {
+  color: #333 !important;
+  background: transparent !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  padding: 5px 15px !important;
+  display: block !important;
+}
+
+/* رفع مشکل موقعیت */
+.bootstrap-select .dropdown-menu {
+  inset: 100% auto auto 0 !important;
+  transform: none !important;
+}
+/* فعال کردن نمایش اشاره‌گر */
+.dropdown-menu a, 
+.dropdown-menu li, 
+.dropdown-item {
+  cursor: pointer !important;
+}
+
+/* جلوگیری از انتخاب متن */
+.dropdown-menu {
+  user-select: none !important;
+}
+
+/* نمایش مناسب برای حالت باز */
+.dropdown-menu.show {
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* استایل‌های اختصاصی برای تقویم شمسی */
+.datepicker-dropdown {
+  z-index: 100010 !important; /* بالاتر از سایر المان‌ها */
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  position: absolute !important;
+}
+
+/* جلوگیری از بسته شدن خودکار */
+.datepicker-dropdown.dropdown-menu {
+  display: block !important;
+}
+
+/* استایل‌های داخلی تقویم */
+.datepicker table {
+  width: 100% !important;
+}
+
+.datepicker th, .datepicker td {
+  padding: 5px !important;
+  text-align: center !important;
+}
+
+.datepicker .active.day {
+  background-color: #2c3e50 !important;
+  color: white !important;
+}
+
+/* حاشیه و سایه برای بهتر دیده شدن */
+.datepicker-dropdown {
+  border: 1px solid #ddd !important;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.175) !important;
+  padding: 10px !important;
+  background: #fff !important;
+}
