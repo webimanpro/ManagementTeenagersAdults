@@ -87,39 +87,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['TeenID'])) {
     $deleteImage = isset($_POST['delete_image']) && $_POST['delete_image'] == '1';
     
     // Handle image upload
-    $imageUpdate = '';
-    if (isset($_FILES['TeenImage']) && $_FILES['TeenImage']['error'] === UPLOAD_ERR_OK) {
-        $file = $_FILES['TeenImage'];
-        $allowed = ['jpg', 'jpeg', 'png'];
-        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        
-        if (in_array($ext, $allowed)) {
-            $uploadDir = realpath(__DIR__ . '/..') . '/upload/';
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0777, true);
-            }
-            
-            $newFilename = 'teen_' . time() . '_' . uniqid() . '.' . $ext;
-            $targetPath = $uploadDir . $newFilename;
-            
-            if (move_uploaded_file($file['tmp_name'], $targetPath)) {
-                $imageUpdate = ", TeenImage = '/upload/" . $newFilename . "'";
-                
-                // Delete old image if exists
-                $stmt = $conn->prepare("SELECT TeenImage FROM Teen WHERE TeenID = ?");
-                $stmt->bind_param("i", $TeenID);
-                $stmt->execute();
-                $result = $stmt->get_result();
-                if ($result->num_rows > 0) {
-                    $row = $result->fetch_assoc();
-                    if (!empty($row['TeenImage']) && file_exists(realpath(__DIR__ . '/..') . $row['TeenImage'])) {
-                        @unlink(realpath(__DIR__ . '/..') . $row['TeenImage']);
-                    }
-                }
-                $stmt->close();
-            }
+$imageUpdate = '';
+if (isset($_FILES['TeenImage']) && $_FILES['TeenImage']['error'] === UPLOAD_ERR_OK) {
+    $file = $_FILES['TeenImage'];
+    $allowed = ['jpg', 'jpeg', 'png'];
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    
+    if (in_array($ext, $allowed)) {
+        $uploadDir = realpath(__DIR__ . '/..') . '/upload/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
         }
-    } elseif ($deleteImage) {
+        
+        // استفاده از نام اصلی فایل
+        $originalName = basename($file['name']);
+        $targetPath = $uploadDir . $originalName;
+        
+        // اگر فایل با همین نام وجود داشت، پسوند عددی اضافه کنید
+        $counter = 1;
+        $nameWithoutExt = pathinfo($originalName, PATHINFO_FILENAME);
+        $extension = pathinfo($originalName, PATHINFO_EXTENSION);
+        
+        while (file_exists($targetPath)) {
+            $newName = $nameWithoutExt . '_' . $counter . '.' . $extension;
+            $targetPath = $uploadDir . $newName;
+            $counter++;
+        }
+        
+        if (move_uploaded_file($file['tmp_name'], $targetPath)) {
+            $imageUpdate = ", TeenImage = '/upload/" . basename($targetPath) . "'";
+            
+            // Delete old image if exists
+            $stmt = $conn->prepare("SELECT TeenImage FROM Teen WHERE TeenID = ?");
+            $stmt->bind_param("i", $TeenID);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            if ($result->num_rows > 0) {
+                $row = $result->fetch_assoc();
+                if (!empty($row['TeenImage']) && file_exists(realpath(__DIR__ . '/..') . $row['TeenImage'])) {
+                    @unlink(realpath(__DIR__ . '/..') . $row['TeenImage']);
+                }
+            }
+            $stmt->close();
+        }
+    }
+	}elseif ($deleteImage) {
         // Delete existing image if delete was requested
         $stmt = $conn->prepare("SELECT TeenImage FROM Teen WHERE TeenID = ?");
         $stmt->bind_param("i", $TeenID);

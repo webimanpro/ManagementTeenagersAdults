@@ -112,42 +112,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // File upload validation (image only, <= 500KB)
-    if (isset($_FILES['AdultImage']) && $_FILES['AdultImage']['error'] !== UPLOAD_ERR_NO_FILE) {
-        $file = $_FILES['AdultImage'];
-        if ($file['error'] !== UPLOAD_ERR_OK) {
-            $errors['AdultImage'] = 'خطا در بارگذاری تصویر.';
-        } else {
-            $allowedExt = ['jpg','jpeg','png'];
-            $maxSize = 500 * 1024; // 500KB
-            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            if (!in_array($ext, $allowedExt, true)) {
-                $errors['AdultImage'] = 'فرمت مجاز تصویر فقط jpg, jpeg, png است.';
+if (isset($_FILES['AdultImage']) && $_FILES['AdultImage']['error'] !== UPLOAD_ERR_NO_FILE) {
+    $file = $_FILES['AdultImage'];
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        $errors['AdultImage'] = 'خطا در بارگذاری تصویر.';
+    } else {
+        $allowedExt = ['jpg','jpeg','png'];
+        $maxSize = 500 * 1024; // 500KB
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExt, true)) {
+            $errors['AdultImage'] = 'فرمت مجاز تصویر فقط jpg, jpeg, png است.';
+        }
+        if ($file['size'] > $maxSize) {
+            $errors['AdultImage'] = 'حجم تصویر باید کمتر از 500 کیلوبایت باشد.';
+        }
+        // Basic MIME check
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mime  = $finfo->file($file['tmp_name']);
+        $allowedMime = ['image/jpeg','image/png'];
+        if (!in_array($mime, $allowedMime, true)) {
+            $errors['AdultImage'] = 'نوع فایل تصویر معتبر نیست.';
+        }
+        
+        // If OK, move to /upload with original filename
+        if (!isset($errors['AdultImage'])) {
+            $uploadDir = realpath(__DIR__ . '/..') . DIRECTORY_SEPARATOR . 'upload';
+            if (!is_dir($uploadDir)) { 
+                @mkdir($uploadDir, 0775, true); 
             }
-            if ($file['size'] > $maxSize) {
-                $errors['AdultImage'] = 'حجم تصویر باید کمتر از 500 کیلوبایت باشد.';
+            
+            // استفاده از نام اصلی فایل
+            $originalName = basename($file['name']);
+            $destPath = $uploadDir . DIRECTORY_SEPARATOR . $originalName;
+            
+            // اگر فایل با همین نام وجود داشت، پسوند عددی اضافه کنید
+            $counter = 1;
+            $nameWithoutExt = pathinfo($originalName, PATHINFO_FILENAME);
+            $extension = pathinfo($originalName, PATHINFO_EXTENSION);
+            
+            while (file_exists($destPath)) {
+                $newName = $nameWithoutExt . '_' . $counter . '.' . $extension;
+                $destPath = $uploadDir . DIRECTORY_SEPARATOR . $newName;
+                $counter++;
             }
-            // Basic MIME check
-            $finfo = new finfo(FILEINFO_MIME_TYPE);
-            $mime  = $finfo->file($file['tmp_name']);
-            $allowedMime = ['image/jpeg','image/png'];
-            if (!in_array($mime, $allowedMime, true)) {
-                $errors['AdultImage'] = 'نوع فایل تصویر معتبر نیست.';
-            }
-            // If OK, move to /upload
-            if (!isset($errors['AdultImage'])) {
-                $uploadDir = realpath(__DIR__ . '/..') . DIRECTORY_SEPARATOR . 'upload';
-                if (!is_dir($uploadDir)) { @mkdir($uploadDir, 0775, true); }
-                $basename = 'adult_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
-                $destPath = $uploadDir . DIRECTORY_SEPARATOR . $basename;
-                if (move_uploaded_file($file['tmp_name'], $destPath)) {
-                    // Save relative path from site root
-                    $AdultImagePath = '/upload/' . $basename;
-                } else {
-                    $errors['AdultImage'] = 'انتقال فایل تصویر ناموفق بود.';
-                }
+            
+            if (move_uploaded_file($file['tmp_name'], $destPath)) {
+                // Save relative path from site root
+                $AdultImagePath = '/upload/' . basename($destPath);
+            } else {
+                $errors['AdultImage'] = 'انتقال فایل تصویر ناموفق بود.';
             }
         }
     }
+}
 
     if (empty($errors)) {
         // Convert Jalali dates to Gregorian for database using our functions
