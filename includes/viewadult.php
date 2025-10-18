@@ -1,6 +1,5 @@
 ﻿<?php
-
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
+// بررسی دسترسی کاربر
 require_once __DIR__ . '/check_access.php';
 requireAccess(basename(__FILE__));
 if (session_status() === PHP_SESSION_NONE) { 
@@ -11,20 +10,20 @@ require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/jdf.php';
 
 // Initialize variables
-$adult = null;
+$Adult = null;
 $message = '';
 $messageType = '';
 
 // Check if AdultID is provided in the URL
 if (isset($_GET['AdultID']) && is_numeric($_GET['AdultID'])) {
-    $adultID = (int)$_GET['AdultID'];
-    $stmt = $conn->prepare("SELECT * FROM adult WHERE AdultID = ? LIMIT 1");
-    $stmt->bind_param("i", $adultID);
+    $AdultID = (int)$_GET['AdultID'];
+    $stmt = $conn->prepare("SELECT * FROM Adult WHERE AdultID = ? LIMIT 1");
+    $stmt->bind_param("i", $AdultID);
     
     if ($stmt->execute()) {
         $result = $stmt->get_result();
         if ($result->num_rows > 0) {
-            $adult = $result->fetch_assoc();
+            $Adult = $result->fetch_assoc();
         } else {
             $message = 'هیچ بزرگسالی با کد مشخص شده یافت نشد.';
             $messageType = 'danger';
@@ -87,96 +86,58 @@ if (isset($_GET['AdultID']) && is_numeric($_GET['AdultID'])) {
             padding: 5px 10px;
             border-radius: 20px;
         }
+        .bank-info-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .bank-info-section .info-label {
+            color: white;
+        }
+        .bank-info-section .info-value {
+            color: white;
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+        }
     </style>
 </head>
 <body>
-<?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-include __DIR__ . '/header.php'; ?>
+<?php include __DIR__ . '/header.php'; ?>
 
 <div class="container py-4">
-    <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-if ($message): ?>
-        <div class="alert alert-<?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo $messageType; ?> alert-dismissible fade show" role="alert">
-            <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo $message; ?>
+    <?php if ($message): ?>
+        <div class="alert alert-<?php echo $messageType; ?> alert-dismissible fade show" role="alert">
+            <?php echo $message; ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
-    <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-endif; ?>
+    <?php endif; ?>
 
-    <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-if (isset($adult)): ?>
+    <?php if (isset($Adult)): ?>
     <div class="profile-container">
         <div class="profile-header">
             <div class="row align-items-center">
                 <div class="col-md-3 text-center">
-                    <img src="<?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo !empty($adult['AdultImage']) ? '../' . $adult['AdultImage'] : '../assets/img/avatarprofile.png'; ?>" 
+                    <img src="<?php echo !empty($Adult['AdultImage']) ? '../' . $Adult['AdultImage'] : '../assets/img/avatarprofile.png'; ?>" 
                          class="profile-image rounded-circle" 
                          alt="تصویر پروفایل">
                 </div>
                 <div class="col-md-9">
-                    <h2 class="mb-2"><?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultName'] . ' ' . $adult['AdultFamily']); ?></h2>
-                    <p class="text-muted mb-1">کدسیستمی: <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultSysCode']); ?></p>
-                    <p class="text-muted mb-1">کد ملی: <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultMelli']); ?></p>
+                    <h2 class="mb-2"><?php echo htmlspecialchars($Adult['AdultName'] . ' ' . $Adult['AdultFamily']); ?></h2>
+                    <p class="text-muted mb-1">کدسیستمی: <?php echo htmlspecialchars($Adult['AdultSysCode']); ?></p>
+                    <p class="text-muted mb-1">کد ملی: <?php echo htmlspecialchars($Adult['AdultMelli']); ?></p>
                     <?php
-                    
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-$statusClass = '';
-                    if ($adult['AdultStatus'] === 'عادی') {
+                    $statusClass = '';
+                    if ($Adult['AdultStatus'] === 'عادی') {
                         $statusClass = 'bg-success';
-                    } elseif ($adult['AdultStatus'] === 'تعلیق') {
+                    } elseif ($Adult['AdultStatus'] === 'تعلیق') {
                         $statusClass = 'bg-warning';
-                    } elseif ($adult['AdultStatus'] === 'فعال') {
+                    } elseif ($Adult['AdultStatus'] === 'فعال') {
                         $statusClass = 'bg-danger';
                     }
                     ?>
-                    <span class="status-badge text-white <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo $statusClass; ?>">
-                        <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultStatus']); ?>
+                    <span class="status-badge text-white <?php echo $statusClass; ?>">
+                        <?php echo htmlspecialchars($Adult['AdultStatus']); ?>
                     </span>
                 </div>
             </div>
@@ -188,49 +149,29 @@ echo htmlspecialchars($adult['AdultStatus']); ?>
                 
                 <div class="info-item">
                     <div class="info-label">نام پدر</div>
-                    <div class="info-value"><?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultFather']); ?></div>
+                    <div class="info-value"><?php echo htmlspecialchars($Adult['AdultFather']); ?></div>
                 </div>
 
                 <div class="info-item">
                     <div class="info-label">تاریخ تولد</div>
                     <div class="info-value">
-                        <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo !empty($adult['AdultDateBirth']) ? to_persian_date($adult['AdultDateBirth']) : 'ثبت نشده'; ?>
+                        <?php echo !empty($Adult['AdultDateBirth']) ? to_persian_date($Adult['AdultDateBirth']) : 'ثبت نشده'; ?>
                     </div>
                 </div>
 
                 <div class="info-item">
                     <div class="info-label">محل تولد</div>
-                    <div class="info-value"><?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultPlaceBirth'] ?? 'ثبت نشده'); ?></div>
+                    <div class="info-value"><?php echo htmlspecialchars($Adult['AdultPlaceBirth'] ?? 'ثبت نشده'); ?></div>
                 </div>
 
                 <div class="info-item">
                     <div class="info-label">محل صدور</div>
-                    <div class="info-value"><?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultPlaceCerti'] ?? 'ثبت نشده'); ?></div>
+                    <div class="info-value"><?php echo htmlspecialchars($Adult['AdultPlaceCerti'] ?? 'ثبت نشده'); ?></div>
                 </div>
 
                 <div class="info-item">
                     <div class="info-label">گروه خونی</div>
-                    <div class="info-value"><?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultBloodType'] ?? 'ثبت نشده'); ?></div>
+                    <div class="info-value"><?php echo htmlspecialchars($Adult['AdultBloodType'] ?? 'ثبت نشده'); ?></div>
                 </div>
             </div>
 
@@ -239,47 +180,58 @@ echo htmlspecialchars($adult['AdultBloodType'] ?? 'ثبت نشده'); ?></div>
 
                 <div class="info-item">
                     <div class="info-label">موبایل 1</div>
-                    <div class="info-value"><?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultMobile1'] ?? 'ثبت نشده'); ?></div>
+                    <div class="info-value"><?php echo htmlspecialchars($Adult['AdultMobile1'] ?? 'ثبت نشده'); ?></div>
                 </div>
 
                 <div class="info-item">
                     <div class="info-label">موبایل 2</div>
-                    <div class="info-value"><?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultMobile2'] ?? 'ثبت نشده'); ?></div>
+                    <div class="info-value"><?php echo htmlspecialchars($Adult['AdultMobile2'] ?? 'ثبت نشده'); ?></div>
                 </div>
 
                 <div class="info-item">
                     <div class="info-label">تحصیلات</div>
-                    <div class="info-value"><?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultEducation'] ?? 'ثبت نشده'); ?></div>
+                    <div class="info-value"><?php echo htmlspecialchars($Adult['AdultEducation'] ?? 'ثبت نشده'); ?></div>
                 </div>
 
                 <div class="info-item">
                     <div class="info-label">شهر</div>
-                    <div class="info-value"><?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultCity'] ?? 'ثبت نشده'); ?></div>
+                    <div class="info-value"><?php echo htmlspecialchars($Adult['AdultCity'] ?? 'ثبت نشده'); ?></div>
                 </div>
 
                 <div class="info-item">
                     <div class="info-label">کد پستی</div>
-                    <div class="info-value"><?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo htmlspecialchars($adult['AdultZipCode'] ?? 'ثبت نشده'); ?></div>
+                    <div class="info-value"><?php echo htmlspecialchars($Adult['AdultZipCode'] ?? 'ثبت نشده'); ?></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- بخش اطلاعات بانکی -->
+						<div class="col-12 mt-4">
+                        <h5 class="border-bottom pb-2 mb-3">اطلاعات بانکی</h5>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <div class="info-label">نام بانک</div>
+                        <div class="info-value"><?php echo htmlspecialchars($Adult['AdultBankName'] ?? 'ثبت نشده'); ?></div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <div class="info-label">شماره حساب</div>
+                        <div class="info-value"><?php echo htmlspecialchars($Adult['AdultAccountNumber'] ?? 'ثبت نشده'); ?></div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <div class="info-label">شماره کارت</div>
+                        <div class="info-value"><?php echo htmlspecialchars($Adult['AdultCardNumber'] ?? 'ثبت نشده'); ?></div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <div class="info-label">شماره شبا</div>
+                        <div class="info-value"><?php echo htmlspecialchars($Adult['AdultShebaNumber'] ?? 'ثبت نشده'); ?></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -289,11 +241,7 @@ echo htmlspecialchars($adult['AdultZipCode'] ?? 'ثبت نشده'); ?></div>
                 <h4 class="mb-3 text-primary">آدرس</h4>
                 <div class="info-item">
                     <div class="info-value" style="border-bottom: none; padding: 15px; background-color: #fff; border-radius: 5px; min-height: 80px;">
-                        <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo !empty($adult['AdultAddress']) ? nl2br(htmlspecialchars($adult['AdultAddress'])) : 'آدرس ثبت نشده است.'; ?>
+                        <?php echo !empty($Adult['AdultAddress']) ? nl2br(htmlspecialchars($Adult['AdultAddress'])) : 'آدرس ثبت نشده است.'; ?>
                     </div>
                 </div>
             </div>
@@ -303,39 +251,45 @@ echo !empty($adult['AdultAddress']) ? nl2br(htmlspecialchars($adult['AdultAddres
             <div class="col-12">
                 <h4 class="mb-3 text-primary">اطلاعات سیستمی</h4>
                 <div class="row">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <div class="info-item">
-                            <div class="info-label">تاریخ ثبت نام</div>
+                            <div class="info-label">تاریخ ثبت عادی</div>
                             <div class="info-value">
-                                <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo !empty($adult['AdultRegDate']) ? to_persian_date($adult['AdultRegDate']) : 'ثبت نشده'; ?>
+                                <?php echo !empty($Adult['AdultRegDate']) ? to_persian_date($Adult['AdultRegDate']) : 'ثبت نشده'; ?>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
+                        <div class="info-item">
+                            <div class="info-label">تاریخ ثبت فعال</div>
+                            <div class="info-value">
+                                <?php echo !empty($Adult['AdultActiveDate']) ? to_persian_date($Adult['AdultActiveDate']) : 'ثبت نشده'; ?>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="info-item">
+                            <div class="info-label">تاریخ ثبت تعلیق</div>
+                            <div class="info-value">
+                                <?php echo !empty($Adult['AdultSuspendDate']) ? to_persian_date($Adult['AdultSuspendDate']) : 'ثبت نشده'; ?>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
                         <div class="info-item">
                             <div class="info-label">تاریخ ایجاد</div>
                             <div class="info-value">
-                                <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo to_persian_date($adult['AdultCreated']); ?>
+                                <?php echo to_persian_date($Adult['AdultCreated']); ?>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-6">
                         <div class="info-item">
                             <div class="info-label">آخرین بروزرسانی</div>
                             <div class="info-value">
-                                <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo to_persian_date($adult['AdultUpdated']); ?>
+                                <?php echo to_persian_date($Adult['AdultUpdated']); ?>
                             </div>
                         </div>
                     </div>
@@ -345,11 +299,7 @@ echo to_persian_date($adult['AdultUpdated']); ?>
 
         <div class="row mt-5">
             <div class="col-12 text-center">
-                <a href="editadult.php?AdultID=<?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-echo $adult['AdultID']; ?>" class="btn btn-primary px-4">
+                <a href="editadult.php?AdultID=<?php echo $Adult['AdultID']; ?>" class="btn btn-primary px-4">
                     <i class="bi bi-pencil"></i> ویرایش اطلاعات
                 </a>
                 <a href="listadult.php" class="btn btn-outline-secondary me-2">
@@ -361,18 +311,10 @@ echo $adult['AdultID']; ?>" class="btn btn-primary px-4">
             </div>
         </div>
     </div>
-    <?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-endif; ?>
+    <?php endif; ?>
 </div>
 
-<?php 
-// ط¨ط±ط±ط³غŒ ط¯ط³طھط±ط³غŒ ع©ط§ط±ط¨ط±
-require_once __DIR__ . '/check_access.php';
-requireAccess(basename(__FILE__));
-include __DIR__ . '/footer.php'; ?>
+<?php include __DIR__ . '/footer.php'; ?>
 
 <script src="../assets/js/jquery-3.7.1.min.js"></script>
 <script src="../assets/js/bootstrap.bundle.min.js"></script>

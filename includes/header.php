@@ -45,6 +45,40 @@ if (isset($conn) && $conn && !empty($sessionUsername)) {
         $stmt->close();
     }
 }
+
+// تابع برای دریافت تاریخ شمسی جاری
+function getCurrentJalaliDate() {
+    if (function_exists('jdate')) {
+        return jdate('Y/m/d');
+    } else {
+        // Fallback conversion
+        $now = new DateTime('now', new DateTimeZone('Asia/Tehran'));
+        $gy = (int)$now->format('Y');
+        $gm = (int)$now->format('m');
+        $gd = (int)$now->format('d');
+        
+        $g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
+        $gy2 = ($gm > 2) ? ($gy + 1) : $gy;
+        $days = 355666 + (365 * $gy) + (int)(($gy2 + 3) / 4) - (int)(($gy2 + 99) / 100) + (int)(($gy2 + 399) / 400) + $gd + $g_d_m[$gm - 1];
+        $jy = -1595 + (33 * (int)($days / 12053));
+        $days %= 12053;
+        $jy += 4 * (int)($days / 1461);
+        $days %= 1461;
+        if ($days > 365) { 
+            $jy += (int)(($days - 1) / 365); 
+            $days = ($days - 1) % 365; 
+        }
+        if ($days < 186) { 
+            $jm = 1 + (int)($days / 31); 
+            $jd = 1 + ($days % 31); 
+        } else { 
+            $jm = 7 + (int)(($days - 186) / 30); 
+            $jd = 1 + (($days - 186) % 30); 
+        }
+        
+        return $jy . '/' . str_pad($jm, 2, '0', STR_PAD_LEFT) . '/' . str_pad($jd, 2, '0', STR_PAD_LEFT);
+    }
+}
 ?>
 
 <style>
@@ -76,6 +110,48 @@ body.class-management-page {
 
 .card {
     background: rgba(255, 255, 255, 0.98) !important;
+}
+/* استایل ویجت تاریخ در هدر */
+.date-widget-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    margin-right: 10px;
+}
+
+.date-widget-header i {
+    color: #fff;
+    margin-left: 8px;
+    font-size: 0.9em;
+}
+
+.date-widget-header span {
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9em;
+    direction: rtl;
+}
+
+/* responsive adjustments */
+@media (max-width: 768px) {
+    .date-widget-header {
+        padding: 6px 8px;
+        margin-right: 5px;
+    }
+    
+    .date-widget-header span {
+        font-size: 0.8em;
+    }
+}
+
+@media (max-width: 480px) {
+    .date-widget-header {
+        display: none; /* در موبایل مخفی شود */
+    }
 }
 </style>
 
@@ -185,6 +261,14 @@ body.class-management-page {
                             </a>
                         </li>
                     </ul>
+                        </li>
+                
+                <!-- ویجت تاریخ شمسی -->
+                <li class="nav-item">
+                    <div class="date-widget-header">
+                        <span class="mb-3><i class="bi bi-calendar"></i>&nbsp; تاریخ امروز &nbsp;</span>
+                        <span id="header-jalali-date"> <?php echo getCurrentJalaliDate(); ?></span>
+                    </div>
                 </li>
             </ul>
         </nav>
@@ -192,6 +276,33 @@ body.class-management-page {
 </header>
 
 <script>
+// تابع برای به‌روزرسانی تاریخ شمسی
+function updateJalaliDate() {
+    const now = new Date();
+    const dateElement = document.getElementById('header-jalali-date');
+    
+    if (dateElement) {
+        try {
+            // استفاده از Intl برای تاریخ شمسی
+            const formatter = new Intl.DateTimeFormat('fa-IR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                calendar: 'persian'
+            });
+            dateElement.textContent = formatter.format(now);
+        } catch (error) {
+            // Fallback در صورت عدم پشتیبانی مرورگر
+            console.log('Persian calendar not supported, using fallback');
+            // در اینجا می‌توانید از کتابخانه‌های خارجی استفاده کنید
+        }
+    }
+}
+
+// به‌روزرسانی اولیه و سپس هر دقیقه
+updateJalaliDate();
+setInterval(updateJalaliDate, 60000); // هر دقیقه به‌روزرسانی شود
+
 // Function to update Persian date and time
 function updatePersianDateTime() {
     const now = new Date();
@@ -423,9 +534,3 @@ document.addEventListener('keydown', function (e) {
 }
 </style>
 <?php ob_flush(); // Flush the output buffer ?>
-<?php 
-// Include date/time widget on all pages
-if (file_exists(__DIR__ . '/datetime-widget.php')) {
-    include __DIR__ . '/datetime-widget.php'; 
-}
-?>

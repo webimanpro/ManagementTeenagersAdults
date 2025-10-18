@@ -1,3 +1,10 @@
+<?php
+// Include jdf library if not already included
+if (!function_exists('jdate')) {
+    require_once __DIR__ . '/jdf.php';
+}
+?>
+
 <footer class="site-footer">
     <div class="container">
         <div class="footer-text">

@@ -6,14 +6,15 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start(); 
 }
 require_once __DIR__ . '/../config/database.php';
-
+require_once __DIR__ . '/jdf.php';
 $errors = [];
 $success = '';
 $preview_data = [];
 $import_type = '';
 $next_id = 0;
+$has_existing_records = false; // پرچم برای تشخیص رکوردهای موجود
 
-// تابع تبدیل تاریخ
+// تابع تبدیل تاریخ شمسی به میلادی
 function convertExcelDate($excelDate) {
     if (empty($excelDate) || $excelDate === '') {
         return null;
@@ -24,10 +25,18 @@ function convertExcelDate($excelDate) {
         
         // فرمت تاریخ شمسی: 1390/01/01
         if (preg_match('/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/', $excelDate, $matches)) {
-            return $matches[1] . '/' . str_pad($matches[2], 2, '0', STR_PAD_LEFT) . '/' . str_pad($matches[3], 2, '0', STR_PAD_LEFT);
+            $year = (int)$matches[1];
+            $month = (int)$matches[2];
+            $day = (int)$matches[3];
+            
+            // تبدیل تاریخ شمسی به میلادی
+            $gregorianDate = jalali_to_gregorian($year, $month, $day);
+            if ($gregorianDate) {
+                return sprintf('%04d-%02d-%02d', $gregorianDate[0], $gregorianDate[1], $gregorianDate[2]);
+            }
         }
         
-        // فرمت تاریخ میلادی: 2021-01-01
+        // فرمت تاریخ میلادی: 2021-01-01 (اگر کاربر تاریخ میلادی وارد کرد)
         if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $excelDate, $matches)) {
             return $matches[1] . '-' . str_pad($matches[2], 2, '0', STR_PAD_LEFT) . '-' . str_pad($matches[3], 2, '0', STR_PAD_LEFT);
         }
@@ -84,6 +93,41 @@ function getNextId($conn, $import_type) {
     return 1;
 }
 
+// تابع بررسی وجود رکورد در دیتابیس
+function checkExistingRecords($conn, $import_type, $preview_data) {
+    $existing_records = [];
+    
+    foreach ($preview_data as $row) {
+        $sys_code = $row['sys_code'];
+        $melli = $row['melli'];
+        
+        if ($import_type === 'teen') {
+            // بررسی با کدسیستمی
+            $check_stmt = $conn->prepare("SELECT TeenID, TeenSysCode, TeenMelli FROM teen WHERE TeenSysCode = ? OR TeenMelli = ?");
+        } else {
+            // بررسی با کدسیستمی
+            $check_stmt = $conn->prepare("SELECT AdultID, AdultSysCode, AdultMelli FROM adult WHERE AdultSysCode = ? OR AdultMelli = ?");
+        }
+        
+        $check_stmt->bind_param('ss', $sys_code, $melli);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+        
+        if ($check_result->num_rows > 0) {
+            while ($existing_row = $check_result->fetch_assoc()) {
+                $existing_records[] = [
+                    'sys_code' => $existing_row[$import_type === 'teen' ? 'TeenSysCode' : 'AdultSysCode'],
+                    'melli' => $existing_row[$import_type === 'teen' ? 'TeenMelli' : 'AdultMelli'],
+                    'id' => $existing_row[$import_type === 'teen' ? 'TeenID' : 'AdultID']
+                ];
+            }
+        }
+        $check_stmt->close();
+    }
+    
+    return $existing_records;
+}
+
 // پردازش آپلود فایل
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['import_type'])) {
@@ -97,6 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $preview_data = $_SESSION['preview_data'];
         $import_type = $_SESSION['import_type'];
         $inserted_count = 0;
+        $updated_count = 0;
         $error_count = 0;
         $error_messages = [];
         
@@ -113,69 +158,111 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // بررسی وجود کدسیستمی تکراری
                 if ($import_type === 'teen') {
-                    $check_stmt = $conn->prepare("SELECT TeenID FROM teen WHERE TeenSysCode = ?");
+                    $check_stmt = $conn->prepare("SELECT TeenID FROM teen WHERE TeenSysCode = ? OR TeenMelli = ?");
                 } else {
-                    $check_stmt = $conn->prepare("SELECT AdultID FROM adult WHERE AdultSysCode = ?");
+                    $check_stmt = $conn->prepare("SELECT AdultID FROM adult WHERE AdultSysCode = ? OR AdultMelli = ?");
                 }
-                $check_stmt->bind_param('s', $row['sys_code']);
+                $check_stmt->bind_param('ss', $row['sys_code'], $row['melli']);
                 $check_stmt->execute();
                 $check_result = $check_stmt->get_result();
-                
-                if ($check_result->num_rows > 0) {
-                    $error_count++;
-                    $error_messages[] = "ردیف {$row['row_num']}: کدسیستمی '{$row['sys_code']}' تکراری است";
-                    $check_stmt->close();
-                    continue;
-                }
-                $check_stmt->close();
-
-                // وارد کردن داده
-                if ($import_type === 'teen') {
-                    $stmt = $conn->prepare("INSERT INTO teen (
-                        TeenSysCode, TeenMelli, TeenName, TeenFamily, TeenFather, 
-                        TeenMobile1, TeenMobile2, TeenDateBirth, TeenRegDate, TeenStatus,
-                        TeenPlaceBirth, TeenPlaceCerti, TeenBloodType, TeenEducation, TeenCity, TeenZipCode, TeenAddress
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                } else {
-                    $stmt = $conn->prepare("INSERT INTO adult (
-                        AdultSysCode, AdultMelli, AdultName, AdultFamily, AdultFather, 
-                        AdultMobile1, AdultMobile2, AdultDateBirth, AdultRegDate, AdultStatus,
-                        AdultPlaceBirth, AdultPlaceCerti, AdultBloodType, AdultEducation, AdultCity, AdultZipCode, AdultAddress
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                }
                 
                 // تنظیم مقادیر پیش‌فرض برای فیلدهای اختیاری
                 $status = in_array($row['status'], ['عادی', 'فعال', 'تعلیق']) ? $row['status'] : 'عادی';
                 $blood_type = in_array($row['blood_type'], ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-']) ? $row['blood_type'] : '';
                 
-                $stmt->bind_param(
-                    'sssssssssssssssss',
-                    $row['sys_code'],
-                    $row['melli'],
-                    $row['name'],
-                    $row['family'],
-                    $row['father'],
-                    $row['mobile1'],
-                    $row['mobile2'],
-                    $row['birth_date'],
-                    $row['reg_date'],
-                    $status,
-                    $row['birth_place'],
-                    $row['certi_place'],
-                    $blood_type,
-                    $row['education'],
-                    $row['city'],
-                    $row['zip_code'],
-                    $row['address']
-                );
-                
-                if ($stmt->execute()) {
-                    $inserted_count++;
+                if ($check_result->num_rows > 0) {
+                    // UPDATE موجود
+                    $existing_row = $check_result->fetch_assoc();
+                    
+                    if ($import_type === 'teen') {
+                        $stmt = $conn->prepare("UPDATE teen SET 
+                            TeenMelli = ?, TeenName = ?, TeenFamily = ?, TeenFather = ?, 
+                            TeenMobile1 = ?, TeenMobile2 = ?, TeenDateBirth = ?, TeenRegDate = ?, TeenStatus = ?,
+                            TeenPlaceBirth = ?, TeenPlaceCerti = ?, TeenBloodType = ?, TeenEducation = ?, TeenCity = ?, TeenZipCode = ?, TeenAddress = ?
+                            WHERE TeenSysCode = ? OR TeenMelli = ?");
+                    } else {
+                        $stmt = $conn->prepare("UPDATE adult SET 
+                            AdultMelli = ?, AdultName = ?, AdultFamily = ?, AdultFather = ?, 
+                            AdultMobile1 = ?, AdultMobile2 = ?, AdultDateBirth = ?, AdultRegDate = ?, AdultStatus = ?,
+                            AdultPlaceBirth = ?, AdultPlaceCerti = ?, AdultBloodType = ?, AdultEducation = ?, AdultCity = ?, AdultZipCode = ?, AdultAddress = ?
+                            WHERE AdultSysCode = ? OR AdultMelli = ?");
+                    }
+                    
+                    $stmt->bind_param(
+                        'ssssssssssssssssss',
+                        $row['melli'],
+                        $row['name'],
+                        $row['family'],
+                        $row['father'],
+                        $row['mobile1'],
+                        $row['mobile2'],
+                        $row['birth_date'],
+                        $row['reg_date'],
+                        $status,
+                        $row['birth_place'],
+                        $row['certi_place'],
+                        $blood_type,
+                        $row['education'],
+                        $row['city'],
+                        $row['zip_code'],
+                        $row['address'],
+                        $row['sys_code'],
+                        $row['melli']
+                    );
+                    
+                    if ($stmt->execute()) {
+                        $updated_count++;
+                    } else {
+                        $error_count++;
+                        $error_messages[] = "ردیف {$row['row_num']}: خطا در بروزرسانی - " . $stmt->error;
+                    }
+                    $stmt->close();
                 } else {
-                    $error_count++;
-                    $error_messages[] = "ردیف {$row['row_num']}: خطا در ذخیره سازی - " . $stmt->error;
+                    // INSERT جدید
+                    if ($import_type === 'teen') {
+                        $stmt = $conn->prepare("INSERT INTO teen (
+                            TeenSysCode, TeenMelli, TeenName, TeenFamily, TeenFather, 
+                            TeenMobile1, TeenMobile2, TeenDateBirth, TeenRegDate, TeenStatus,
+                            TeenPlaceBirth, TeenPlaceCerti, TeenBloodType, TeenEducation, TeenCity, TeenZipCode, TeenAddress
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    } else {
+                        $stmt = $conn->prepare("INSERT INTO adult (
+                            AdultSysCode, AdultMelli, AdultName, AdultFamily, AdultFather, 
+                            AdultMobile1, AdultMobile2, AdultDateBirth, AdultRegDate, AdultStatus,
+                            AdultPlaceBirth, AdultPlaceCerti, AdultBloodType, AdultEducation, AdultCity, AdultZipCode, AdultAddress
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    }
+                    
+                    $stmt->bind_param(
+                        'sssssssssssssssss',
+                        $row['sys_code'],
+                        $row['melli'],
+                        $row['name'],
+                        $row['family'],
+                        $row['father'],
+                        $row['mobile1'],
+                        $row['mobile2'],
+                        $row['birth_date'],
+                        $row['reg_date'],
+                        $status,
+                        $row['birth_place'],
+                        $row['certi_place'],
+                        $blood_type,
+                        $row['education'],
+                        $row['city'],
+                        $row['zip_code'],
+                        $row['address']
+                    );
+                    
+                    if ($stmt->execute()) {
+                        $inserted_count++;
+                    } else {
+                        $error_count++;
+                        $error_messages[] = "ردیف {$row['row_num']}: خطا در ذخیره سازی - " . $stmt->error;
+                    }
+                    $stmt->close();
                 }
-                $stmt->close();
+                $check_stmt->close();
             }
             
             $conn->commit();
@@ -188,11 +275,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         unset($_SESSION['preview_data']);
         unset($_SESSION['import_type']);
         unset($_SESSION['next_id']);
+        unset($_SESSION['existing_records']);
         
         if ($error_count === 0) {
-            $success = "تمام $inserted_count رکورد با موفقیت وارد شدند.";
+            $success = "";
+            if ($inserted_count > 0) {
+                $success .= "$inserted_count رکورد جدید با موفقیت وارد شدند. ";
+            }
+            if ($updated_count > 0) {
+                $success .= "$updated_count رکورد موجود با موفقیت بروزرسانی شدند.";
+            }
         } else {
-            $success = "$inserted_count رکورد با موفقیت وارد شدند. $error_count رکورد با خطا مواجه شدند.";
+            $success = "";
+            if ($inserted_count > 0) {
+                $success .= "$inserted_count رکورد جدید با موفقیت وارد شدند. ";
+            }
+            if ($updated_count > 0) {
+                $success .= "$updated_count رکورد موجود با موفقیت بروزرسانی شدند. ";
+            }
+            $success .= "$error_count رکورد با خطا مواجه شدند.";
             if (!empty($error_messages)) {
                 $errors = array_merge($errors, array_slice($error_messages, 0, 10));
             }
@@ -286,10 +387,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // دریافت شناسه بعدی برای نوع انتخاب شده
                         $next_id = getNextId($conn, $import_type);
                         
+                        // بررسی رکوردهای موجود
+                        $existing_records = checkExistingRecords($conn, $import_type, $preview_data);
+                        $has_existing_records = !empty($existing_records);
+                        
                         $_SESSION['preview_data'] = $preview_data;
                         $_SESSION['import_type'] = $import_type;
                         $_SESSION['next_id'] = $next_id;
+                        $_SESSION['existing_records'] = $existing_records;
+                        $_SESSION['has_existing_records'] = $has_existing_records;
+                        
                         $success = count($preview_data) . ' رکورد برای پیش‌نمایش پیدا شد. شناسه شروع: ' . $next_id;
+                        if ($has_existing_records) {
+                            $success .= ' - برخی رکوردها در سیستم موجود هستند و بروزرسانی خواهند شد.';
+                        }
                     }
                 } catch (Exception $e) {
                     $errors[] = 'خطا در خواندن فایل CSV: ' . $e->getMessage();
@@ -303,6 +414,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (isset($_SESSION['next_id']) && isset($_SESSION['import_type'])) {
     $next_id = $_SESSION['next_id'];
     $import_type = $_SESSION['import_type'];
+    $has_existing_records = $_SESSION['has_existing_records'] ?? false;
 }
 ?>
 
@@ -490,106 +602,134 @@ if (isset($_SESSION['next_id']) && isset($_SESSION['import_type'])) {
         </div>
 
         <!-- پیش‌نمایش داده‌ها -->
-        <?php if (!empty($preview_data) && isset($_SESSION['preview_data'])): ?>
-        <div class="card">
-            <div class="card-header bg-info text-white">
-                <i class="bi bi-eye me-2"></i>
-                پیش‌نمایش اطلاعات - <?php echo $import_type === 'teen' ? 'نوجوانان' : 'بزرگسالان'; ?>
-                <span class="badge bg-light text-dark"><?php echo count($preview_data); ?> رکورد</span>
-                <span class="badge bg-warning ms-2">شناسه شروع: <?php echo $next_id; ?></span>
-            </div>
-            <div class="card-body">
-                <div class="alert alert-warning">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    لطفاً اطلاعات زیر را بررسی کرده و در صورت صحیح بودن، دکمه "تایید و وارد کردن اطلاعات" را بزنید.
-                    <br><strong>توجه:</strong> شناسه‌های نمایش داده شده در جدول، شناسه‌هایی هستند که پس از ذخیره در دیتابیس اختصاص خواهند یافت.
-                </div>
-                
-                <div class="table-container">
-                    <table class="table table-bordered table-striped preview-table">
-                        <thead>
-                            <tr>
-                                <th width="50">ردیف</th>
-                                <th width="80">شناسه آینده</th>
-                                <th>کدسیستمی</th>
-                                <th>کدملی</th>
-                                <th>نام</th>
-                                <th>نام خانوادگی</th>
-                                <th>نام پدر</th>
-                                <th>موبایل1</th>
-                                <th>موبایل2</th>
-                                <th>تاریخ تولد</th>
-                                <th>تاریخ ثبت نام</th>
-                                <th>وضعیت</th>
-                                <th>محل تولد</th>
-                                <th>محل صدور</th>
-                                <th>گروه خونی</th>
-                                <th>تحصیلات</th>
-                                <th>شهر</th>
-                                <th>کدپستی</th>
-                                <th>آدرس</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php 
-                            $current_id = $next_id;
-                            foreach ($preview_data as $index => $row): 
-                            ?>
-                            <tr>
-                                <td class="text-center"><?php echo $index + 1; ?></td>
-                                <td class="text-center fw-bold text-primary"><?php echo $current_id; ?></td>
-                                <td class="<?php echo empty($row['sys_code']) ? 'table-danger' : ''; ?>"><?php echo htmlspecialchars($row['sys_code']); ?></td>
-                                <td class="<?php echo empty($row['melli']) ? 'table-danger' : ''; ?>"><?php echo htmlspecialchars($row['melli']); ?></td>
-                                <td class="<?php echo empty($row['name']) ? 'table-danger' : ''; ?>"><?php echo htmlspecialchars($row['name']); ?></td>
-                                <td class="<?php echo empty($row['family']) ? 'table-danger' : ''; ?>"><?php echo htmlspecialchars($row['family']); ?></td>
-                                <td><?php echo htmlspecialchars($row['father']); ?></td>
-                                <td><?php echo htmlspecialchars($row['mobile1']); ?></td>
-                                <td><?php echo htmlspecialchars($row['mobile2']); ?></td>
-                                <td><?php echo htmlspecialchars($row['birth_date'] ?? '-'); ?></td>
-                                <td><?php echo htmlspecialchars($row['reg_date'] ?? '-'); ?></td>
-                                <td>
-                                    <span class="badge 
-                                        <?php echo $row['status'] === 'فعال' ? 'bg-success' : 
-                                              ($row['status'] === 'تعلیق' ? 'bg-warning' : 'bg-secondary'); ?>">
-                                        <?php echo htmlspecialchars($row['status']); ?>
-                                    </span>
-                                </td>
-                                <td><?php echo htmlspecialchars($row['birth_place']); ?></td>
-                                <td><?php echo htmlspecialchars($row['certi_place']); ?></td>
-                                <td>
-                                    <?php if (!empty($row['blood_type'])): ?>
-                                        <span class="badge bg-danger"><?php echo htmlspecialchars($row['blood_type']); ?></span>
-                                    <?php else: ?>
-                                        -
-                                    <?php endif; ?>
-                                </td>
-                                <td><?php echo htmlspecialchars($row['education']); ?></td>
-                                <td><?php echo htmlspecialchars($row['city']); ?></td>
-                                <td><?php echo htmlspecialchars($row['zip_code']); ?></td>
-                                <td><small><?php echo htmlspecialchars($row['address']); ?></small></td>
-                            </tr>
-                            <?php 
-                            $current_id++;
-                            endforeach; 
-                            ?>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="mt-4 text-center">
-                    <form method="post">
-                        <input type="hidden" name="confirm_import" value="1">
-                        <button type="submit" class="btn btn-success btn-lg">
-                            <i class="bi bi-check-circle me-2"></i>تایید و وارد کردن اطلاعات
-                        </button>
-                        <a href="excelteenadult.php" class="btn btn-secondary btn-lg">
-                            <i class="bi bi-x-circle me-2"></i>انصراف
-                        </a>
-                    </form>
-                </div>
-            </div>
-        </div>
+<?php if (!empty($preview_data) && isset($_SESSION['preview_data'])): ?>
+<div class="card">
+    <div class="card-header bg-info text-white">
+        <i class="bi bi-eye me-2"></i>
+        پیش‌نمایش اطلاعات - <?php echo $import_type === 'teen' ? 'نوجوانان' : 'بزرگسالان'; ?>
+        <span class="badge bg-light text-dark"><?php echo count($preview_data); ?> رکورد</span>
+        <span class="badge bg-warning ms-2">شناسه شروع: <?php echo $next_id; ?></span>
+        <?php if ($has_existing_records): ?>
+            <span class="badge bg-danger ms-2">برخی رکوردها موجود هستند</span>
         <?php endif; ?>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            لطفاً اطلاعات زیر را بررسی کرده و در صورت صحیح بودن، دکمه مناسب را بزنید.
+            <br><strong>توجه:</strong> 
+            <?php if ($has_existing_records): ?>
+                برخی رکوردها در سیستم موجود هستند و بروزرسانی خواهند شد.
+            <?php else: ?>
+                تمام رکوردها جدید هستند و اضافه خواهند شد.
+            <?php endif; ?>
+        </div>
+        
+        <div class="table-container">
+            <table class="table table-bordered table-striped preview-table">
+                <thead>
+                    <tr>
+                        <th width="50">ردیف</th>
+                        <th width="80">شناسه آینده</th>
+                        <th>کدسیستمی</th>
+                        <th>کدملی</th>
+                        <th>نام</th>
+                        <th>نام خانوادگی</th>
+                        <th>نام پدر</th>
+                        <th>موبایل1</th>
+                        <th>موبایل2</th>
+                        <th>تاریخ تولد</th>
+                        <th>تاریخ ثبت نام</th>
+                        <th>وضعیت</th>
+                        <th>محل تولد</th>
+                        <th>محل صدور</th>
+                        <th>گروه خونی</th>
+                        <th>تحصیلات</th>
+                        <th>شهر</th>
+                        <th>کدپستی</th>
+                        <th>آدرس</th>
+                        <th width="100">وضعیت</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php 
+                    $current_id = $next_id;
+                    $existing_records = $_SESSION['existing_records'] ?? [];
+                    foreach ($preview_data as $index => $row): 
+                        $is_existing = false;
+                        foreach ($existing_records as $existing) {
+                            if ($existing['sys_code'] == $row['sys_code'] || $existing['melli'] == $row['melli']) {
+                                $is_existing = true;
+                                break;
+                            }
+                        }
+                    ?>
+                    <tr>
+                        <td class="text-center"><?php echo $index + 1; ?></td>
+                        <td class="text-center fw-bold text-primary"><?php echo $is_existing ? 'موجود' : $current_id; ?></td>
+                        <td class="<?php echo empty($row['sys_code']) ? 'table-danger' : ''; ?>"><?php echo htmlspecialchars($row['sys_code']); ?></td>
+                        <td class="<?php echo empty($row['melli']) ? 'table-danger' : ''; ?>"><?php echo htmlspecialchars($row['melli']); ?></td>
+                        <td class="<?php echo empty($row['name']) ? 'table-danger' : ''; ?>"><?php echo htmlspecialchars($row['name']); ?></td>
+                        <td class="<?php echo empty($row['family']) ? 'table-danger' : ''; ?>"><?php echo htmlspecialchars($row['family']); ?></td>
+                        <td><?php echo htmlspecialchars($row['father']); ?></td>
+                        <td><?php echo htmlspecialchars($row['mobile1']); ?></td>
+                        <td><?php echo htmlspecialchars($row['mobile2']); ?></td>
+                        <td><?php echo htmlspecialchars($row['birth_date'] ?? '-'); ?></td>
+                        <td><?php echo htmlspecialchars($row['reg_date'] ?? '-'); ?></td>
+                        <td>
+                            <span class="badge 
+                                <?php echo $row['status'] === 'فعال' ? 'bg-success' : 
+                                      ($row['status'] === 'تعلیق' ? 'bg-warning' : 'bg-secondary'); ?>">
+                                <?php echo htmlspecialchars($row['status']); ?>
+                            </span>
+                        </td>
+                        <td><?php echo htmlspecialchars($row['birth_place']); ?></td>
+                        <td><?php echo htmlspecialchars($row['certi_place']); ?></td>
+                        <td>
+                            <?php if (!empty($row['blood_type'])): ?>
+                                <span class="badge bg-danger"><?php echo htmlspecialchars($row['blood_type']); ?></span>
+                            <?php else: ?>
+                                -
+                            <?php endif; ?>
+                        </td>
+                        <td><?php echo htmlspecialchars($row['education']); ?></td>
+                        <td><?php echo htmlspecialchars($row['city']); ?></td>
+                        <td><?php echo htmlspecialchars($row['zip_code']); ?></td>
+                        <td><small><?php echo htmlspecialchars($row['address']); ?></small></td>
+                        <td class="text-center">
+                            <?php if ($is_existing): ?>
+                                <span class="badge bg-warning">بروزرسانی</span>
+                            <?php else: ?>
+                                <span class="badge bg-success">جدید</span>
+                                <?php $current_id++; ?>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-4 text-center">
+            <form method="post">
+                <input type="hidden" name="confirm_import" value="1">
+                <?php if ($has_existing_records): ?>
+                    <button type="submit" class="btn btn-warning btn-lg">
+                        <i class="bi bi-arrow-clockwise me-2"></i>بروزرسانی و وارد کردن اطلاعات
+                    </button>
+                <?php else: ?>
+                    <button type="submit" class="btn btn-success btn-lg">
+                        <i class="bi bi-check-circle me-2"></i>تایید و وارد کردن اطلاعات
+                    </button>
+                <?php endif; ?>
+                <a href="excelteenadult.php" class="btn btn-secondary btn-lg">
+                    <i class="bi bi-x-circle me-2"></i>انصراف
+                </a>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
     </div>
 </div>
 
