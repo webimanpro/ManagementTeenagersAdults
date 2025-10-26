@@ -25,6 +25,68 @@ initialize_system_settings();
 // Get background setting
 $background_image = get_background_image();
 
+// Get current year
+$currentYear = date('Y');
+
+// Initialize statistics variables
+$teenCount = 0;
+$adultCount = 0;
+$activeClassesCount = 0;
+$todayAttendanceCount = 0;
+
+// Get user statistics (teens and adults)
+$sql = "SELECT 
+            SUM(CASE 
+                WHEN UserDateBirth IS NOT NULL AND 
+                     (DATEDIFF(CURRENT_DATE, UserDateBirth) / 365.25) < 18 
+                THEN 1 
+                ELSE 0 
+            END) as teen_count,
+            SUM(CASE 
+                WHEN UserDateBirth IS NOT NULL AND 
+                     (DATEDIFF(CURRENT_DATE, UserDateBirth) / 365.25) >= 18 
+                THEN 1 
+                ELSE 0 
+            END) as adult_count,
+            SUM(CASE WHEN UserDateBirth IS NULL THEN 1 ELSE 0 END) as unknown_age_count
+        FROM users";
+$result = $conn->query($sql);
+if ($result && $row = $result->fetch_assoc()) {
+    $teenCount = (int)$row['teen_count'];
+    $adultCount = (int)$row['adult_count'];
+    $unknownAgeCount = (int)$row['unknown_age_count'];
+    
+    // If we have users with unknown age, you might want to handle them (e.g., show a warning)
+    if ($unknownAgeCount > 0) {
+        // You could log this or show a message to the admin
+        error_log("Warning: Found $unknownAgeCount users without birthdate information");
+    }
+}
+
+// Get active classes count
+$sql = "SELECT COUNT(*) as count FROM class";
+$result = $conn->query($sql);
+if ($result && $row = $result->fetch_assoc()) {
+    $activeClassesCount = (int)$row['count'];
+}
+
+// Get today's attendance count
+$today = date('Y-m-d');
+$sql = "SELECT COUNT(DISTINCT UserID) as count FROM rollcalluser WHERE DATE(RollcallUserDate) = ?";
+$stmt = $conn->prepare($sql);
+if ($stmt) {
+    $stmt->bind_param('s', $today);
+    if ($stmt->execute()) {
+        $result = $stmt->get_result();
+        if ($row = $result->fetch_assoc()) {
+            $todayAttendanceCount = (int)$row['count'];
+        }
+    } else {
+        error_log("Error getting today's attendance: " . $stmt->error);
+    }
+    $stmt->close();
+}
+
 // Set page title
 $page_title = 'خانه';
 ?>
@@ -51,6 +113,7 @@ $page_title = 'خانه';
         /* بهبود خوانایی محتوا روی پس‌زمینه */
         .main-content {
             background: transparent !important;
+            margin-top: 80px;
         }
 
         .content-box {
@@ -143,8 +206,7 @@ $page_title = 'خانه';
     <?php include 'includes/header.php'; ?>
 
     <div class="main-content">
-        <div class="main-container">
-            <div class="content-box">
+        <div class="content-box">
                 <div class="welcome-message">
                     <div class="welcome-icon">
                         <i class="fas fa-tachometer-alt"></i>
@@ -194,24 +256,24 @@ $page_title = 'خانه';
                         <div class="row g-3 justify-content-center">
                             <?php if (isManagerOrAbove()): ?>
                             <div class="col-md-3 col-sm-6">
-                                <a href="includes/regteen.php" class="btn btn-primary btn-lg w-100">
+                                <a href="includes/regsiteruser.php" class="btn btn-primary btn-lg w-100">
                                     <i class="fas fa-user-plus"></i>
-                                    ثبت نوجوان جدید
+                                    ثبت نام کاربران
                                 </a>
-								<a href="includes/regadult.php" class="btn btn-primary btn-lg w-100">
+								<a href="includes/listuser.php" class="btn btn-primary btn-lg w-100">
                                     <i class="fas fa-user-plus"></i>
-                                    ثبت بزرگسالان جدید
+                                    لیست کاربران
                                 </a>
                             </div>
                             <?php endif; ?>
                             <div class="col-md-3 col-sm-6">
-                                <a href="includes/rollcallteen.php" class="btn btn-success btn-lg w-100">
+                                <a href="includes/exceluser.php" class="btn btn-success btn-lg w-100">
                                     <i class="fas fa-clipboard-check"></i>
-                                    حضور و غیاب نوجوانان
+                                    ثبت نام اکسل
                                 </a>
-								<a href="includes/rollcalladult.php" class="btn btn-secondary btn-lg w-100">
+								<a href="includes/rollcalluser.php" class="btn btn-secondary btn-lg w-100">
                                     <i class="fas fa-user-check"></i>
-                                    حضور و غیاب بزرگسالان
+                                    حضور و غیاب کاربران
                                 </a>
                             </div>
                             <?php if (isManagerOrAbove()): ?>
@@ -249,38 +311,12 @@ $page_title = 'خانه';
     
     <script src="assets/js/bootstrap.bundle.min.js"></script>
     <script>
-        // شبیه‌سازی آمار (در نسخه واقعی باید از AJAX استفاده شود)
         document.addEventListener('DOMContentLoaded', function() {
-            // شبیه‌سازی اعداد تصادفی برای نمایش
-            document.getElementById('teen-count').textContent = Math.floor(Math.random() * 50) + 20;
-            document.getElementById('adult-count').textContent = Math.floor(Math.random() * 30) + 10;
-            document.getElementById('course-count').textContent = Math.floor(Math.random() * 10) + 5;
-            document.getElementById('attendance-count').textContent = Math.floor(Math.random() * 40) + 15;
-
-            // انیمیشن شمارش
-            function animateCount(element, finalValue, duration = 2000) {
-                let start = 0;
-                const increment = finalValue / (duration / 50);
-                const timer = setInterval(() => {
-                    start += increment;
-                    if (start >= finalValue) {
-                        element.textContent = finalValue;
-                        clearInterval(timer);
-                    } else {
-                        element.textContent = Math.floor(start);
-                    }
-                }, 50);
-            }
-
-            // اجرای انیمیشن برای همه آمار
-            const statElements = document.querySelectorAll('.stat-number');
-            statElements.forEach(element => {
-                const finalValue = parseInt(element.textContent);
-                element.textContent = '0';
-                setTimeout(() => {
-                    animateCount(element, finalValue);
-                }, 500);
-            });
+            // Set the actual values from PHP variables
+            document.getElementById('teen-count').textContent = <?php echo $teenCount; ?>;
+            document.getElementById('adult-count').textContent = <?php echo $adultCount; ?>;
+            document.getElementById('course-count').textContent = <?php echo $activeClassesCount; ?>;
+            document.getElementById('attendance-count').textContent = <?php echo $todayAttendanceCount; ?>;
         });
 
         // به‌روزرسانی تاریخ و زمان
