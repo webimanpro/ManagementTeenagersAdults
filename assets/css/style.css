@@ -395,7 +395,6 @@ body {
 /* User Selection Styles */
 .user-list, .teen-list {
     max-height: 400px;
-    overflow-y: auto;
     border-radius: 0 0 var(--border-radius) var(--border-radius);
     background-color: #fff;
     box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
