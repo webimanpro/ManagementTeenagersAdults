@@ -29,7 +29,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     
     // Check input errors before authentication
     if (empty($username_err) && empty($password_err)) {
-        $sql = "SELECT id, username, password, role, full_name, email, phone FROM users WHERE username = ?";
+        $sql = "SELECT id, username, password, role, full_name, email, phone FROM admins WHERE username = ?";
         
         if ($stmt = $conn->prepare($sql)) {
             $stmt->bind_param("s", $param_username);
@@ -56,9 +56,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             $_SESSION["email"] = $email;
                             $_SESSION["phone"] = $phone;
                             
+                            // Close statement before redirect
+                            $stmt->close();
+                            
                             // Redirect user to welcome page
-							header("location: /index.php");
-							exit();
+                            header("location: /index.php");
+                            exit();
                         } else {
                             // Password is not valid
                             $login_err = "نام کاربری یا رمز عبور اشتباه است.";
@@ -77,9 +80,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
     
-    // Close connection
-    $conn->close();
+    // Don't close connection here - let functions.php handle it
+    // $conn->close();
 }
+
 // Initialize system settings
 initialize_system_settings();
 

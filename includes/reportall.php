@@ -19,16 +19,20 @@ require_once '../config/database.php';
 require_once 'jdf.php';
 // Include TCPDF for PDF export
 require_once '../assets/tcpdf/tcpdf.php';
+
 // Initialize variables from POST or GET or SESSION
-// اگر درخواست export است، step را 6 قرار می‌دهیم
 if (isset($_POST['export_excel']) || isset($_POST['print_report']) || isset($_POST['export_pdf'])) {
-    $step = 6;
+    $step = 5;
 } else {
     $step = $_GET['step'] ?? ($_POST['step'] ?? 1);
 }
+
+// Initialize selected_users to true by default
+$selected_users = true;
+
 // اگر در مرحله اول هستیم و دکمه‌ای زده نشده، همه انتخاب‌ها را پاک کن
 if ($step == 1 && empty($_POST) && empty($_GET)) {
-    $selected_teens = false;
+    $selected_users = true;
     $report_type = '';
     $selected_year = '';
     $selected_month = '';
@@ -38,10 +42,11 @@ if ($step == 1 && empty($_POST) && empty($_GET)) {
     $selected_fields = [];
     $header_desc = '';
     $footer_desc = '';
+    $report_name = '';
+    
     // همچنین sessionها را پاک کن
     unset(
-        $_SESSION['selected_teens'],
-        $_SESSION['selected_adults'],
+        $_SESSION['selected_users'],
         $_SESSION['report_type'],
         $_SESSION['selected_year'],
         $_SESSION['selected_month'],
@@ -50,14 +55,15 @@ if ($step == 1 && empty($_POST) && empty($_GET)) {
         $_SESSION['syscode_to'],
         $_SESSION['selected_fields'],
         $_SESSION['header_desc'],
-        $_SESSION['footer_desc']
+        $_SESSION['footer_desc'],
+        $_SESSION['report_name']
     );
 }
+
 $saved_report_id = $_GET['saved_report'] ?? '';
-$report_name = $_POST['report_name'] ?? '';
+
 // ابتدا مقادیر را از session بخوانیم (اگر وجود دارند)
-$selected_teens = $_SESSION['selected_teens'] ?? false;
-$selected_adults = $_SESSION['selected_adults'] ?? false;
+$selected_users = $_SESSION['selected_users'] ?? true;
 $report_type = $_SESSION['report_type'] ?? '';
 $selected_year = $_SESSION['selected_year'] ?? '';
 $selected_month = $_SESSION['selected_month'] ?? '';
@@ -67,12 +73,11 @@ $syscode_to = $_SESSION['syscode_to'] ?? '';
 $selected_fields = $_SESSION['selected_fields'] ?? [];
 $header_desc = $_SESSION['header_desc'] ?? '';
 $footer_desc = $_SESSION['footer_desc'] ?? '';
+$report_name = $_SESSION['report_name'] ?? '';
+
 // حالا اگر مقادیر در POST وجود دارند، آن‌ها را جایگزین کنیم
-if (isset($_POST['teens'])) {
-    $selected_teens = true;
-}
-if (isset($_POST['adults'])) {
-    $selected_adults = true;
+if (isset($_POST['users'])) {
+    $selected_users = true;
 }
 if (isset($_POST['report_type'])) {
     $report_type = $_POST['report_type'];
@@ -101,69 +106,71 @@ if (isset($_POST['header_desc'])) {
 if (isset($_POST['footer_desc'])) {
     $footer_desc = $_POST['footer_desc'];
 }
-// Step 6: ذخیره گزارش
-$save_report = isset($_POST['save_report']) ? true : false;
-// تعریف فیلدهای موجود برای هر گروه با نام‌های واقعی ستون‌ها
-$teen_fields = [
-    'TeenID' => 'کدسیستمی',
-    'TeenName' => 'نام',
-    'TeenFamily' => 'نام خانوادگی', 
-    'TeenFather' => 'نام پدر',
-    'TeenMelli' => 'کد ملی',
-    'TeenMobile1' => 'موبایل 1',
-    'TeenMobile2' => 'موبایل 2',
-    'TeenDateBirth' => 'تاریخ تولد',
-    'TeenRegDate' => 'تاریخ ثبت نام',
-    'TeenPlaceBirth' => 'محل تولد',
-    'TeenBloodType' => 'گروه خونی',
-    'TeenEducation' => 'تحصیلات',
-    'TeenAddress' => 'آدرس',
-    'TeenCity' => 'شهر'
-];
-$adult_fields = [
-    'AdultID' => 'کدسیستمی',
-    'AdultName' => 'نام',
-    'AdultFamily' => 'نام خانوادگی',
-    'AdultFather' => 'نام پدر', 
-    'AdultMelli' => 'کد ملی',
-    'AdultMobile1' => 'موبایل 1',
-    'AdultMobile2' => 'موبایل 2',
-    'AdultDateBirth' => 'تاریخ تولد',
-    'AdultRegDate' => 'تاریخ ثبت نام',
-    'AdultPlaceBirth' => 'محل تولد',
-    'AdultBloodType' => 'گروه خونی',
-    'AdultEducation' => 'تحصیلات',
-    'AdultAddress' => 'آدرس',
-    'AdultCity' => 'شهر'
-];
-// فیلدهای پیشفرض برای هر گروه
-$default_fields = ['TeenID', 'TeenName', 'TeenFamily', 'TeenFather', 'TeenMelli'];
-// تنظیم فیلدهای پیش‌فرض بر اساس گروه‌های انتخاب‌شده
-if (empty($selected_fields)) {
-    if ($selected_teens && $selected_adults) {
-        // هر دو گروه انتخاب شده‌اند - فیلدهای پیش‌فرض نوجوانان را انتخاب کن
-        $selected_fields = $default_fields;
-    } elseif ($selected_teens) {
-        // فقط نوجوانان انتخاب شده‌اند
-        $selected_fields = $default_fields;
-    } elseif ($selected_adults) {
-        // فقط بزرگسالان انتخاب شده‌اند - فیلدهای معادل بزرگسالان را انتخاب کن
-        $selected_fields = ['AdultID', 'AdultName', 'AdultFamily', 'AdultFather', 'AdultMelli'];
-    }
+if (isset($_POST['report_name'])) {
+    $report_name = $_POST['report_name'];
 }
+
+// Step 5: ذخیره گزارش
+$save_report = isset($_POST['save_report']) ? true : false;
+
+// تعریف فیلدهای موجود برای کاربران با نام‌های واقعی ستون‌ها
+$users_fields = [
+    'UserSysCode' => 'کدسیستمی',
+    'UserMelli' => 'کدملی',
+    'UserName' => 'نام',
+    'UserFamily' => 'نام خانوادگی',
+    'UserFather' => 'نام پدر',
+    'UserMobile1' => 'موبایل1',
+    'UserMobile2' => 'موبایل2',
+    'UserPhone' => 'تلفن ثابت',
+    'UserEmail' => 'ایمیل',
+    'UserDateBirth' => 'تاریخ تولد',
+    'UserRegDate' => 'تاریخ ثبت عادی',
+    'UserActiveDate' => 'تاریخ ثبت فعال',
+    'UserSuspendDate' => 'تاریخ ثبت تعلیق',
+    'UserStatus' => 'وضعیت',
+    'UserPlaceBirth' => 'محل تولد',
+    'UserPlaceCerti' => 'محل صدور',
+    'UserBloodType' => 'گروه خونی',
+    'UserEducation' => 'وضعیت تحصیلی',
+    'UserNumbersh' => 'شماره شناسنامه',
+    'UserMaritalStatus' => 'وضعیت تاهل',
+    'UserDutyStatus' => 'وضعیت خدمت',
+    'UserJobWork' => 'شغل',
+    'UserBankName' => 'نام بانک',
+    'UserAccountNumber' => 'شماره حساب بانکی',
+    'UserCardNumber' => 'شماره کارت بانکی',
+    'UserShebaNumber' => 'شماره شبا بانکی',
+    'UserCity' => 'شهر',
+    'UserZipCode' => 'کدپستی',
+    'UserAddress' => 'آدرس',
+    'UserOtherActivity' => 'فعالیت های دیگر'
+];
+
+// فیلدهای پیشفرض
+$default_fields = ['UserSysCode', 'UserMelli', 'UserName', 'UserFamily', 'UserFather'];
+
+// تنظیم فیلدهای پیش‌فرض
+if (empty($selected_fields)) {
+    $selected_fields = $default_fields;
+}
+
 // تاریخ پیش‌فرض (امروز به شمسی)
 $currentShamsiDate = gregorianToShamsi(date('Y-m-d'));
 $currentParts = explode('/', $currentShamsiDate);
 $currentYear = $currentParts[0] ?? '1400';
 $currentMonth = $currentParts[1] ?? '01';
+
 // تنظیم مقادیر پیش‌فرض
 if (!$selected_year) $selected_year = $currentYear;
 if (!$selected_month) $selected_month = $currentMonth;
+
 // Generate Jalali years (1400-1420)
 $jalali_years = [];
 for ($year = 1400; $year <= 1420; $year++) {
     $jalali_years[] = $year;
 }
+
 // Jalali months
 $jalali_months = [
     '01' => 'فروردین',
@@ -179,6 +186,7 @@ $jalali_months = [
     '11' => 'بهمن',
     '12' => 'اسفند'
 ];
+
 // تابع تبدیل تاریخ میلادی به شمسی
 function gregorianToShamsi($gregorianDate) {
     if (empty($gregorianDate) || $gregorianDate == '0000-00-00') return '';
@@ -187,9 +195,10 @@ function gregorianToShamsi($gregorianDate) {
     $jdate = gregorian_to_jalali(date('Y', $timestamp), date('m', $timestamp), date('d', $timestamp));
     return $jdate[0] . '/' . sprintf('%02d', $jdate[1]) . '/' . sprintf('%02d', $jdate[2]);
 }
+
 // تابع تبدیل تاریخ شمسی به میلادی
 function shamsiToGregorian($shamsiDate) {
-    if (empty($shamsiDate) || $shamsiDate == '0000-00-00') return null;
+    if (empty($shamsiDate)) return null;
     $parts = explode('/', $shamsiDate);
     if (count($parts) !== 3) return null;
     list($year, $month, $day) = $parts;
@@ -199,6 +208,7 @@ function shamsiToGregorian($shamsiDate) {
     }
     return null;
 }
+
 // دریافت گزارشات ذخیره شده
 $saved_reports = [];
 $saved_reports_stmt = $conn->prepare("SELECT * FROM reportall ORDER BY created_at DESC");
@@ -210,6 +220,7 @@ if ($saved_reports_stmt) {
     }
     $saved_reports_stmt->close();
 }
+
 // اگر گزارش ذخیره شده انتخاب شده باشد
 if ($saved_report_id) {
     $load_report_stmt = $conn->prepare("SELECT * FROM reportall WHERE id = ?");
@@ -218,8 +229,7 @@ if ($saved_report_id) {
     $load_report_result = $load_report_stmt->get_result();
     if ($load_report_result->num_rows > 0) {
         $saved_report = $load_report_result->fetch_assoc();
-        $selected_teens = $saved_report['include_teens'];
-        $selected_adults = $saved_report['include_adults'];
+        $selected_users = $saved_report['include_users'];
         $report_type = $saved_report['report_type'];
         $selected_year = $saved_report['report_year'];
         $selected_month = $saved_report['report_month'];
@@ -233,10 +243,11 @@ if ($saved_report_id) {
         if (!empty($saved_report['selected_fields'])) {
             $selected_fields = json_decode($saved_report['selected_fields'], true);
         }
-        $step = 6; // برو به مرحله نهایی
+        $step = 5; // برو به مرحله نهایی
     }
     $load_report_stmt->close();
 }
+
 // دریافت لیست دوره‌ها
 $classes = [];
 $classes_stmt = $conn->prepare("SELECT ClassID, ClassName FROM class ORDER BY ClassName");
@@ -248,29 +259,35 @@ if ($classes_stmt) {
     }
     $classes_stmt->close();
 }
+
 // پردازش فرم‌ها
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['step1'])) {
         // ذخیره در session
+        $_SESSION['selected_users'] = $selected_users;
         $_SESSION['report_type'] = $report_type;
+        
         if (empty($report_type)) {
             $error = "لطفاً نوع گزارش را انتخاب کنید.";
             $step = 1;
         } else {
-            $step = 2; // برو به مرحله انتخاب فیلدها
+            $step = 2;
         }
     } elseif (isset($_POST['step2'])) {
         // ذخیره در session
-        $_SESSION['selected_teens'] = $selected_teens;
-        $_SESSION['selected_adults'] = $selected_adults;
+        $_SESSION['selected_users'] = $selected_users;
+        $_SESSION['report_type'] = $report_type;
         $_SESSION['selected_year'] = $selected_year;
         $_SESSION['selected_month'] = $selected_month;
         $_SESSION['selected_class'] = $selected_class;
         $_SESSION['syscode_from'] = $syscode_from;
         $_SESSION['syscode_to'] = $syscode_to;
         
-        // برای تمام گزارشات به جز ثبت نام، بررسی سال و ماه
-        if ($report_type !== 'registration') {
+        if ($report_type === 'registration') {
+            // برای گزارش ثبت نام، بررسی محدوده کدسیستمی
+            $step = 3; // رفتن به مرحله انتخاب فیلدها
+        } else {
+            // برای سایر گزارشات، بررسی سال و ماه
             if (empty($selected_year) || empty($selected_month)) {
                 $error = "لطفاً سال و ماه را انتخاب کنید.";
                 $step = 2;
@@ -278,31 +295,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = "لطفاً دوره را انتخاب کنید.";
                 $step = 2;
             } else {
-                $step = 3; // برو به مرحله انتخاب فیلدها
+                $step = 3; // رفتن به مرحله انتخاب فیلدها
             }
-        } else {
-            $step = 3; // برای گزارش ثبت نام مستقیماً به مرحله بعد برو
         }
-    } elseif (isset($_POST['step4'])) {
+    } elseif (isset($_POST['step3'])) {
         // ذخیره در session
         $_SESSION['selected_fields'] = $selected_fields;
+        
         // بررسی انتخاب حداقل یک فیلد
         if (empty($selected_fields)) {
             $error = "لطفاً حداقل یک فیلد را انتخاب کنید.";
-            $step = 4;
+            $step = 3;
         } else {
-            $step = 5;
+            $step = 4;
         }
-    } elseif (isset($_POST['step5'])) {
+    } elseif (isset($_POST['step4'])) {
         // ذخیره در session
         $_SESSION['header_desc'] = $header_desc;
         $_SESSION['footer_desc'] = $footer_desc;
-        $step = 6;
+        $_SESSION['report_name'] = $report_name;
+        
+        $step = 5;
+        
         // ذخیره گزارش اگر کاربر درخواست کرده باشد
         if ($save_report && !empty($report_name)) {
             $selected_fields_json = json_encode($selected_fields);
-            $save_stmt = $conn->prepare("INSERT INTO reportall (report_name, include_teens, include_adults, report_type, report_year, report_month, class_id, syscode_from, syscode_to, selected_fields, header_desc, footer_desc, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
-            $save_stmt->bind_param("siisssissssss", $report_name, $selected_teens, $selected_adults, $report_type, $selected_year, $selected_month, $selected_class, $syscode_from, $syscode_to, $selected_fields_json, $header_desc, $footer_desc);
+            $include_users = $selected_users ? 1 : 0;
+            
+            $save_stmt = $conn->prepare("INSERT INTO reportall (report_name, include_users, report_type, report_year, report_month, class_id, syscode_from, syscode_to, selected_fields, header_desc, footer_desc, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+            $save_stmt->bind_param("sisssssssss", $report_name, $include_users, $report_type, $selected_year, $selected_month, $selected_class, $syscode_from, $syscode_to, $selected_fields_json, $header_desc, $footer_desc);
             $save_stmt->execute();
             $save_stmt->close();
             $success = "گزارش با موفقیت ذخیره شد.";
@@ -310,8 +331,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (isset($_POST['edit_parameters'])) {
         // پاک کردن تمام sessionهای مرتبط با گزارش
         unset(
-            $_SESSION['selected_teens'],
-            $_SESSION['selected_adults'],
+            $_SESSION['selected_users'],
             $_SESSION['report_type'],
             $_SESSION['selected_year'],
             $_SESSION['selected_month'],
@@ -320,17 +340,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['syscode_to'],
             $_SESSION['selected_fields'],
             $_SESSION['header_desc'],
-            $_SESSION['footer_desc']
+            $_SESSION['footer_desc'],
+            $_SESSION['report_name']
         );
         $step = 1;
     }
 }
+
 // تولید گزارش
 $report_data = [];
 $report_title = '';
-if ($step >= 5 && ($selected_teens || $selected_adults)) {
+
+if ($step >= 5 && $selected_users) {
     // ساخت عنوان گزارش
     $report_title = "گزارش ";
+    
     if ($report_type === 'registration') {
         $report_title .= "ثبت نام ";
         if (!empty($syscode_from) && !empty($syscode_to)) {
@@ -340,10 +364,19 @@ if ($step >= 5 && ($selected_teens || $selected_adults)) {
         } elseif (!empty($syscode_to)) {
             $report_title .= "(کدسیستمی تا " . $syscode_to . ") ";
         } else {
-            $report_title .= "(همه کدسیستمی‌ها) ";
+            $report_title .= "(همه کاربران) ";
         }
     } elseif ($report_type === 'attendance') {
         $report_title .= "حضور و غیاب ";
+        if (!empty($selected_class)) {
+            // پیدا کردن نام دوره
+            foreach ($classes as $class) {
+                if ($class['ClassID'] == $selected_class) {
+                    $report_title .= $class['ClassName'] . " ";
+                    break;
+                }
+            }
+        }
         $report_title .= $jalali_months[$selected_month] . " " . $selected_year;
     } elseif ($report_type === 'class') {
         $report_title .= "دوره ";
@@ -356,184 +389,137 @@ if ($step >= 5 && ($selected_teens || $selected_adults)) {
         }
         $report_title .= $jalali_months[$selected_month] . " " . $selected_year;
     }
-    if ($selected_teens && $selected_adults) {
-        $report_title .= " (نوجوانان و بزرگسالان)";
-    } elseif ($selected_teens) {
-        $report_title .= " (نوجوانان)";
-    } elseif ($selected_adults) {
-        $report_title .= " (بزرگسالان)";
-    }
+
+    $report_title .= " (کاربران)";
+
     // تولید داده‌های گزارش بر اساس نوع
     if ($report_type === 'registration') {
         // گزارش ثبت نام با فیلتر کدسیستمی
-        $query_parts = [];
+        $query = "SELECT " . implode(", ", $selected_fields) . " FROM users WHERE 1=1";
         $params = [];
         $types = "";
-        // ساخت SELECT بر اساس فیلدهای انتخاب شده
-        if ($selected_teens) {
-            $teen_select_fields = ["'نوجوان' as type", "TeenID as id"];
-            foreach ($selected_fields as $field) {
-                // فقط فیلدهای مربوط به نوجوانان را اضافه کن
-                if (isset($teen_fields[$field])) {
-                    $teen_select_fields[] = $field;
-                }
-            }
-            $teen_query = "SELECT " . implode(", ", $teen_select_fields) . " FROM teen WHERE TeenStatus = 'فعال'";
-            $conditions = [];
-            if (!empty($syscode_from)) {
-                $conditions[] = "CAST(TeenID AS UNSIGNED) >= ?";
-                $params[] = $syscode_from;
-                $types .= "i";
-            }
-            if (!empty($syscode_to)) {
-                $conditions[] = "CAST(TeenID AS UNSIGNED) <= ?";
-                $params[] = $syscode_to;
-                $types .= "i";
-            }
-            if (!empty($conditions)) {
-                $teen_query .= " AND " . implode(" AND ", $conditions);
-            }
-            $query_parts[] = $teen_query;
+        
+        // اضافه کردن شرایط فیلتر کدسیستمی
+        if (!empty($syscode_from)) {
+            $query .= " AND CAST(UserSysCode AS UNSIGNED) >= ?";
+            $params[] = $syscode_from;
+            $types .= "s";
         }
-        if ($selected_adults) {
-            $adult_select_fields = ["'بزرگسال' as type", "AdultID as id"];
-            foreach ($selected_fields as $field) {
-                // فقط فیلدهای مربوط به بزرگسالان را اضافه کن
-                if (isset($adult_fields[$field])) {
-                    $adult_select_fields[] = $field;
-                }
-            }
-            $adult_query = "SELECT " . implode(", ", $adult_select_fields) . " FROM adult WHERE AdultStatus = 'فعال'";
-            $conditions = [];
-            if (!empty($syscode_from)) {
-                $conditions[] = "CAST(AdultID AS UNSIGNED) >= ?";
-                $params[] = $syscode_from;
-                $types .= "i";
-            }
-            if (!empty($syscode_to)) {
-                $conditions[] = "CAST(AdultID AS UNSIGNED) <= ?";
-                $params[] = $syscode_to;
-                $types .= "i";
-            }
-            if (!empty($conditions)) {
-                $adult_query .= " AND " . implode(" AND ", $conditions);
-            }
-            $query_parts[] = $adult_query;
+        if (!empty($syscode_to)) {
+            $query .= " AND CAST(UserSysCode AS UNSIGNED) <= ?";
+            $params[] = $syscode_to;
+            $types .= "s";
         }
-        if (!empty($query_parts)) {
-            $query = implode(" UNION ALL ", $query_parts) . " ORDER BY CAST(id AS UNSIGNED)";
-            $stmt = $conn->prepare($query);
-            if ($params) {
-                $stmt->bind_param($types, ...$params);
-            }
-            $stmt->execute();
-            $result = $stmt->get_result();
-            while ($row = $result->fetch_assoc()) {
-                // تبدیل تاریخ‌ها به شمسی
-                if (isset($row['TeenRegDate']) && !empty($row['TeenRegDate']) && $row['TeenRegDate'] != '0000-00-00') {
-                    if (strpos($row['TeenRegDate'], '-') !== false && substr($row['TeenRegDate'], 0, 4) > 1500) {
-                        $row['TeenRegDate'] = gregorianToShamsi($row['TeenRegDate']);
-                    }
-                }
-                if (isset($row['TeenDateBirth']) && !empty($row['TeenDateBirth']) && $row['TeenDateBirth'] != '0000-00-00') {
-                    if (strpos($row['TeenDateBirth'], '-') !== false && substr($row['TeenDateBirth'], 0, 4) > 1500) {
-                        $row['TeenDateBirth'] = gregorianToShamsi($row['TeenDateBirth']);
-                    }
-                }
-                if (isset($row['AdultRegDate']) && !empty($row['AdultRegDate']) && $row['AdultRegDate'] != '0000-00-00') {
-                    if (strpos($row['AdultRegDate'], '-') !== false && substr($row['AdultRegDate'], 0, 4) > 1500) {
-                        $row['AdultRegDate'] = gregorianToShamsi($row['AdultRegDate']);
-                    }
-                }
-                if (isset($row['AdultDateBirth']) && !empty($row['AdultDateBirth']) && $row['AdultDateBirth'] != '0000-00-00') {
-                    if (strpos($row['AdultDateBirth'], '-') !== false && substr($row['AdultDateBirth'], 0, 4) > 1500) {
-                        $row['AdultDateBirth'] = gregorianToShamsi($row['AdultDateBirth']);
-                    }
-                }
-                $report_data[] = $row;
-            }
-            $stmt->close();
+        
+        $query .= " ORDER BY CAST(UserSysCode AS UNSIGNED)";
+        
+        $stmt = $conn->prepare($query);
+        if ($params) {
+            $stmt->bind_param($types, ...$params);
         }
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        while ($row = $result->fetch_assoc()) {
+            // تبدیل تاریخ‌ها به شمسی
+            foreach ($row as $key => $value) {
+                if (($key === 'UserRegDate' || $key === 'UserDateBirth' || $key === 'UserActiveDate' || $key === 'UserSuspendDate') && 
+                    !empty($value) && $value != '0000-00-00') {
+                    $row[$key] = gregorianToShamsi($value);
+                }
+            }
+            $report_data[] = $row;
+        }
+        $stmt->close();
+        
     } elseif ($report_type === 'attendance') {
         // گزارش حضور و غیاب
-        $query_parts = [];
-        $params = [];
-        $types = "";
         // تبدیل تاریخ شمسی به میلادی برای کوئری
-        $start_date = shamsiToGregorian($selected_year . '/' . $selected_month . '/01');
-        $end_date = shamsiToGregorian($selected_year . '/' . $selected_month . '/31');
-        // ساخت SELECT بر اساس فیلدهای انتخاب شده
-        if ($selected_teens) {
-            $teen_select_fields = ["'نوجوان' as type", "t.TeenID as id", "t.TeenSysCode as syscode"];
-            foreach ($selected_fields as $field) {
-                if (isset($teen_fields[$field])) {
-                    $teen_select_fields[] = "t." . $field;
+        $start_date_shamsi = $selected_year . '/' . $selected_month . '/01';
+        $end_date_shamsi = $selected_year . '/' . $selected_month . '/31';
+        $start_date = shamsiToGregorian($start_date_shamsi);
+        $end_date = shamsiToGregorian($end_date_shamsi);
+        
+        if (!empty($selected_class)) {
+            // گزارش حضور و غیاب برای دوره خاص
+            // ابتدا اطلاعات دوره را بگیریم
+            $class_stmt = $conn->prepare("SELECT CalssUsers FROM class WHERE ClassID = ?");
+            $class_stmt->bind_param("i", $selected_class);
+            $class_stmt->execute();
+            $class_result = $class_stmt->get_result();
+            $class_data = $class_result->fetch_assoc();
+            $class_stmt->close();
+            
+            $class_users = [];
+            if (!empty($class_data['CalssUsers']) && $class_data['CalssUsers'] !== '[]') {
+                $class_users = json_decode($class_data['CalssUsers'], true);
+            }
+            
+            // استخراج کاربران دوره
+            $user_ids = [];
+            foreach ($class_users as $user) {
+                if (isset($user['type']) && $user['type'] === 'teen') {
+                    $user_ids[] = $user['id'];
                 }
             }
-            // اضافه کردن فیلدهای حضور و غیاب
-            $teen_select_fields[] = "SUM(CASE WHEN rt.Status = 'present' THEN 1 ELSE 0 END) as present_count";
-            $teen_select_fields[] = "SUM(CASE WHEN rt.Status = 'absent' THEN 1 ELSE 0 END) as absent_count";
-            $teen_select_fields[] = "SUM(CASE WHEN rt.Status = 'excused' THEN 1 ELSE 0 END) as excused_count";
-            $query_parts[] = "
-                SELECT " . implode(", ", $teen_select_fields) . "
-                FROM teen t
-                LEFT JOIN rollcallteen rt ON t.TeenID = rt.TeenID 
-                    AND rt.RollcallteenDate BETWEEN ? AND ?
-                WHERE t.TeenStatus = 'فعال'
-                GROUP BY t.TeenID
-            ";
-            $params[] = $start_date;
-            $params[] = $end_date;
-            $types .= "ss";
-        }
-        if ($selected_adults) {
-            $adult_select_fields = ["'بزرگسال' as type", "a.AdultID as id", "a.AdultSysCode as syscode"];
-            foreach ($selected_fields as $field) {
-                if (isset($adult_fields[$field])) {
-                    $adult_select_fields[] = "a." . $field;
+            
+            if (!empty($user_ids)) {
+                $placeholders = str_repeat('?,', count($user_ids) - 1) . '?';
+                $query = "SELECT " . implode(", ", $selected_fields) . ",
+                                 SUM(CASE WHEN r.Status = 'حاضر' THEN 1 ELSE 0 END) as present_count,
+                                 SUM(CASE WHEN r.Status = 'غایب' THEN 1 ELSE 0 END) as absent_count,
+                                 SUM(CASE WHEN r.Status = 'مرخصی' THEN 1 ELSE 0 END) as excused_count
+                          FROM users u
+                          LEFT JOIN rollcalluser r ON u.UserID = r.UserID 
+                                 AND r.ClassID = ? 
+                                 AND r.RollcallUserDate BETWEEN ? AND ?
+                          WHERE u.UserID IN ($placeholders)
+                          GROUP BY u.UserID
+                          ORDER BY CAST(u.UserSysCode AS UNSIGNED)";
+                
+                $stmt = $conn->prepare($query);
+                $params = array_merge([$selected_class, $start_date, $end_date], $user_ids);
+                $types = "iss" . str_repeat("i", count($user_ids));
+                $stmt->bind_param($types, ...$params);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                while ($row = $result->fetch_assoc()) {
+                    $report_data[] = $row;
                 }
+                $stmt->close();
             }
-            // اضافه کردن فیلدهای حضور و غیاب
-            $adult_select_fields[] = "SUM(CASE WHEN ra.Status = 'present' THEN 1 ELSE 0 END) as present_count";
-            $adult_select_fields[] = "SUM(CASE WHEN ra.Status = 'absent' THEN 1 ELSE 0 END) as absent_count";
-            $adult_select_fields[] = "SUM(CASE WHEN ra.Status = 'excused' THEN 1 ELSE 0 END) as excused_count";
-            $query_parts[] = "
-                SELECT " . implode(", ", $adult_select_fields) . "
-                FROM adult a
-                LEFT JOIN rollcalladult ra ON a.AdultID = ra.AdultID 
-                    AND ra.RollcalladultDate BETWEEN ? AND ?
-                WHERE a.AdultStatus = 'فعال'
-                GROUP BY a.AdultID
-            ";
-            $params[] = $start_date;
-            $params[] = $end_date;
-            $types .= "ss";
-        }
-        if (!empty($query_parts)) {
-            $query = implode(" UNION ALL ", $query_parts) . " ORDER BY CAST(id AS UNSIGNED)";
+        } else {
+            // گزارش حضور و غیاب کلیه کاربران
+            $query = "SELECT " . implode(", ", $selected_fields) . ",
+                             SUM(CASE WHEN r.Status = 'حاضر' THEN 1 ELSE 0 END) as present_count,
+                             SUM(CASE WHEN r.Status = 'غایب' THEN 1 ELSE 0 END) as absent_count,
+                             SUM(CASE WHEN r.Status = 'مرخصی' THEN 1 ELSE 0 END) as excused_count
+                      FROM users u
+                      LEFT JOIN rollcalluser r ON u.UserID = r.UserID 
+                             AND r.RollcallUserDate BETWEEN ? AND ?
+                      GROUP BY u.UserID
+                      ORDER BY CAST(u.UserSysCode AS UNSIGNED)";
+            
             $stmt = $conn->prepare($query);
-            if ($params) {
-                $final_params = [];
-                foreach ($params as $param) {
-                    $final_params[] = $param;
-                }
-                $stmt->bind_param(str_repeat("s", count($final_params)), ...$final_params);
-            }
+            $stmt->bind_param('ss', $start_date, $end_date);
             $stmt->execute();
             $result = $stmt->get_result();
+            
             while ($row = $result->fetch_assoc()) {
                 $report_data[] = $row;
             }
             $stmt->close();
         }
+        
     } elseif ($report_type === 'class' && $selected_class) {
         // گزارش دوره
-        $query_parts = [];
-        $params = [];
-        $types = "";
         // تبدیل تاریخ شمسی به میلادی برای کوئری
-        $start_date = shamsiToGregorian($selected_year . '/' . $selected_month . '/01');
-        $end_date = shamsiToGregorian($selected_year . '/' . $selected_month . '/31');
+        $start_date_shamsi = $selected_year . '/' . $selected_month . '/01';
+        $end_date_shamsi = $selected_year . '/' . $selected_month . '/31';
+        $start_date = shamsiToGregorian($start_date_shamsi);
+        $end_date = shamsiToGregorian($end_date_shamsi);
+        
         // ابتدا اطلاعات دوره را بگیریم
         $class_stmt = $conn->prepare("SELECT CalssUsers FROM class WHERE ClassID = ?");
         $class_stmt->bind_param("i", $selected_class);
@@ -541,81 +527,41 @@ if ($step >= 5 && ($selected_teens || $selected_adults)) {
         $class_result = $class_stmt->get_result();
         $class_data = $class_result->fetch_assoc();
         $class_stmt->close();
+        
         $class_users = [];
         if (!empty($class_data['CalssUsers']) && $class_data['CalssUsers'] !== '[]') {
             $class_users = json_decode($class_data['CalssUsers'], true);
         }
+        
         // استخراج کاربران دوره
-        $teen_ids = [];
-        $adult_ids = [];
+        $user_ids = [];
         foreach ($class_users as $user) {
-            if ($user['type'] === 'teen') {
-                $teen_ids[] = $user['id'];
-            } elseif ($user['type'] === 'adult') {
-                $adult_ids[] = $user['id'];
+            if (isset($user['type']) && $user['type'] === 'teen') {
+                $user_ids[] = $user['id'];
             }
         }
-        // ساخت SELECT بر اساس فیلدهای انتخاب شده
-        if ($selected_teens && !empty($teen_ids)) {
-            $teen_select_fields = ["'نوجوان' as type", "t.TeenID as id", "t.TeenSysCode as syscode"];
-            foreach ($selected_fields as $field) {
-                if (isset($teen_fields[$field])) {
-                    $teen_select_fields[] = "t." . $field;
-                }
-            }
-            // اضافه کردن فیلدهای حضور و غیاب
-            $teen_select_fields[] = "SUM(CASE WHEN rt.Status = 'present' THEN 1 ELSE 0 END) as present_count";
-            $teen_select_fields[] = "SUM(CASE WHEN rt.Status = 'absent' THEN 1 ELSE 0 END) as absent_count";
-            $teen_select_fields[] = "SUM(CASE WHEN rt.Status = 'excused' THEN 1 ELSE 0 END) as excused_count";
-            $placeholders = str_repeat('?,', count($teen_ids) - 1) . '?';
-            $query_parts[] = "
-                SELECT " . implode(", ", $teen_select_fields) . "
-                FROM teen t
-                LEFT JOIN rollcallteen rt ON t.TeenID = rt.TeenID 
-                    AND rt.ClassID = ? 
-                    AND rt.RollcallteenDate BETWEEN ? AND ?
-                WHERE t.TeenID IN ($placeholders) AND t.TeenStatus = 'فعال'
-                GROUP BY t.TeenID
-            ";
-            $params = array_merge($params, [$selected_class, $start_date, $end_date]);
-            $types .= "iss";
-            $params = array_merge($params, $teen_ids);
-            $types .= str_repeat("i", count($teen_ids));
-        }
-        if ($selected_adults && !empty($adult_ids)) {
-            $adult_select_fields = ["'بزرگسال' as type", "a.AdultID as id", "a.AdultSysCode as syscode"];
-            foreach ($selected_fields as $field) {
-                if (isset($adult_fields[$field])) {
-                    $adult_select_fields[] = "a." . $field;
-                }
-            }
-            // اضافه کردن فیلدهای حضور و غیاب
-            $adult_select_fields[] = "SUM(CASE WHEN ra.Status = 'present' THEN 1 ELSE 0 END) as present_count";
-            $adult_select_fields[] = "SUM(CASE WHEN ra.Status = 'absent' THEN 1 ELSE 0 END) as absent_count";
-            $adult_select_fields[] = "SUM(CASE WHEN ra.Status = 'excused' THEN 1 ELSE 0 END) as excused_count";
-            $placeholders = str_repeat('?,', count($adult_ids) - 1) . '?';
-            $query_parts[] = "
-                SELECT " . implode(", ", $adult_select_fields) . "
-                FROM adult a
-                LEFT JOIN rollcalladult ra ON a.AdultID = ra.AdultID 
-                    AND ra.ClassID = ? 
-                    AND ra.RollcalladultDate BETWEEN ? AND ?
-                WHERE a.AdultID IN ($placeholders) AND a.AdultStatus = 'فعال'
-                GROUP BY a.AdultID
-            ";
-            $params = array_merge($params, [$selected_class, $start_date, $end_date]);
-            $types .= "iss";
-            $params = array_merge($params, $adult_ids);
-            $types .= str_repeat("i", count($adult_ids));
-        }
-        if (!empty($query_parts)) {
-            $query = implode(" UNION ALL ", $query_parts) . " ORDER BY CAST(id AS UNSIGNED)";
+        
+        if (!empty($user_ids)) {
+            $placeholders = str_repeat('?,', count($user_ids) - 1) . '?';
+            $query = "SELECT " . implode(", ", $selected_fields) . ",
+                             SUM(CASE WHEN r.Status = 'حاضر' THEN 1 ELSE 0 END) as present_count,
+                             SUM(CASE WHEN r.Status = 'غایب' THEN 1 ELSE 0 END) as absent_count,
+                             SUM(CASE WHEN r.Status = 'مرخصی' THEN 1 ELSE 0 END) as excused_count
+                      FROM users u
+                      LEFT JOIN rollcalluser r ON u.UserID = r.UserID 
+                             AND r.ClassID = ? 
+                             AND r.RollcallUserDate BETWEEN ? AND ?
+                      WHERE u.UserID IN ($placeholders)
+                      GROUP BY u.UserID
+                      ORDER BY CAST(u.UserSysCode AS UNSIGNED)";
+            
             $stmt = $conn->prepare($query);
-            if ($params) {
-                $stmt->bind_param($types, ...$params);
-            }
+            $params = array_merge([$selected_class, $start_date, $end_date], $user_ids);
+            $types = "iss" . str_repeat("i", count($user_ids));
+            $stmt->bind_param($types, ...$params);
             $stmt->execute();
             $result = $stmt->get_result();
+            
             while ($row = $result->fetch_assoc()) {
                 $report_data[] = $row;
             }
@@ -623,33 +569,36 @@ if ($step >= 5 && ($selected_teens || $selected_adults)) {
         }
     }
 }
+
 // خروجی اکسل
 if (isset($_POST['export_excel']) && !empty($report_data)) {
     // پاک کردن output buffer
     ob_end_clean();
     header('Content-Type: application/vnd.ms-excel; charset=utf-8');
     header('Content-Disposition: attachment; filename="report_' . date('Y-m-d_H-i-s') . '.xls"');
+    
     echo '<html dir="rtl">';
     echo '<head><meta charset="UTF-8"></head>';
     echo '<body>';
     echo '<table border="1" style="width:100%; border-collapse: collapse;">';
+    
     // هدر گزارش
-    echo '<tr><th colspan="' . (count($selected_fields) + 2) . '" style="background-color: #4a6cf7; color: white; font-size: 16px; padding: 15px;">' . $report_title . '</th></tr>';
+    $colspan = count($selected_fields);
+    if ($report_type === 'attendance' || $report_type === 'class') {
+        $colspan += 4;
+    }
+    echo '<tr><th colspan="' . $colspan . '" style="background-color: #4a6cf7; color: white; font-size: 16px; padding: 15px;">' . $report_title . '</th></tr>';
+    
     // توضیحات هدر
     if (!empty($header_desc)) {
-        echo '<tr><td colspan="' . (count($selected_fields) + 2) . '" style="background-color: #f8f9fa; padding: 10px; text-align: right;"><strong>توضیحات:</strong><br>' . nl2br(htmlspecialchars($header_desc)) . '</td></tr>';
+        echo '<tr><td colspan="' . $colspan . '" style="background-color: #f8f9fa; padding: 10px; text-align: right;"><strong>توضیحات:</strong><br>' . nl2br(htmlspecialchars($header_desc)) . '</td></tr>';
     }
+    
     // هدر جدول
     echo '<tr style="background-color: #e9ecef;">';
     echo '<th style="border: 1px solid #ddd; padding: 8px;">ردیف</th>';
-    echo '<th style="border: 1px solid #ddd; padding: 8px;">نوع</th>';
     foreach ($selected_fields as $field) {
-        $field_name = '';
-        if (isset($teen_fields[$field])) {
-            $field_name = $teen_fields[$field];
-        } elseif (isset($adult_fields[$field])) {
-            $field_name = $adult_fields[$field];
-        }
+        $field_name = $users_fields[$field] ?? $field;
         echo '<th style="border: 1px solid #ddd; padding: 8px;">' . $field_name . '</th>';
     }
     if ($report_type === 'attendance' || $report_type === 'class') {
@@ -659,12 +608,12 @@ if (isset($_POST['export_excel']) && !empty($report_data)) {
         echo '<th style="border: 1px solid #ddd; padding: 8px;">جمع</th>';
     }
     echo '</tr>';
+    
     // داده‌ها
     $counter = 1;
     foreach ($report_data as $row) {
         echo '<tr>';
         echo '<td style="border: 1px solid #ddd; padding: 8px;">' . $counter++ . '</td>';
-        echo '<td style="border: 1px solid #ddd; padding: 8px;">' . htmlspecialchars($row['type']) . '</td>';
         foreach ($selected_fields as $field) {
             $value = $row[$field] ?? '';
             echo '<td style="border: 1px solid #ddd; padding: 8px;">' . htmlspecialchars($value) . '</td>';
@@ -677,19 +626,13 @@ if (isset($_POST['export_excel']) && !empty($report_data)) {
         }
         echo '</tr>';
     }
+    
     // توضیحات فوتر
     if (!empty($footer_desc)) {
-        $colspan = count($selected_fields) + 2;
-        if ($report_type === 'attendance' || $report_type === 'class') {
-            $colspan += 4;
-        }
         echo '<tr><td colspan="' . $colspan . '" style="background-color: #f8f9fa; padding: 10px; text-align: right;"><strong>توضیحات پایانی:</strong><br>' . nl2br(htmlspecialchars($footer_desc)) . '</td></tr>';
     }
+    
     // اطلاعات پایین جدول
-    $colspan = count($selected_fields) + 2;
-    if ($report_type === 'attendance' || $report_type === 'class') {
-        $colspan += 4;
-    }
     echo '<tr><td colspan="' . $colspan . '" style="background-color: #e9ecef; padding: 8px; text-align: center; font-size: 12px;">';
     echo 'تعداد رکوردها: ' . count($report_data) . ' | تاریخ تولید: ' . gregorianToShamsi(date('Y-m-d')) . ' | زمان تولید: ' . date('H:i:s');
     echo '</td></tr>';
@@ -697,6 +640,7 @@ if (isset($_POST['export_excel']) && !empty($report_data)) {
     echo '</body></html>';
     exit;
 }
+
 // چاپ گزارش
 if (isset($_POST['print_report']) && !empty($report_data)) {
     // پاک کردن output buffer
@@ -724,26 +668,23 @@ if (isset($_POST['print_report']) && !empty($report_data)) {
     echo '</style>';
     echo '</head>';
     echo '<body>';
+    
     echo '<div class="print-header">';
     echo '<h1>' . $report_title . '</h1>';
     echo '</div>';
+    
     if (!empty($header_desc)) {
         echo '<div class="header-desc">';
-        echo '<h2 style="font-size:20px; font-weight:bold; text-align:center;">' . nl2br(htmlspecialchars($header_desc)) . '</h2>';
+        echo '<strong>توضیحات:</strong><br>' . nl2br(htmlspecialchars($header_desc));
         echo '</div>';
     }
+    
     echo '<table class="print-table">';
     echo '<thead>';
     echo '<tr>';
     echo '<th>ردیف</th>';
-    echo '<th>نوع</th>';
     foreach ($selected_fields as $field) {
-        $field_name = '';
-        if (isset($teen_fields[$field])) {
-            $field_name = $teen_fields[$field];
-        } elseif (isset($adult_fields[$field])) {
-            $field_name = $adult_fields[$field];
-        }
+        $field_name = $users_fields[$field] ?? $field;
         echo '<th>' . $field_name . '</th>';
     }
     if ($report_type === 'attendance' || $report_type === 'class') {
@@ -755,11 +696,11 @@ if (isset($_POST['print_report']) && !empty($report_data)) {
     echo '</tr>';
     echo '</thead>';
     echo '<tbody>';
+    
     $counter = 1;
     foreach ($report_data as $row) {
         echo '<tr>';
         echo '<td>' . $counter++ . '</td>';
-        echo '<td>' . htmlspecialchars($row['type']) . '</td>';
         foreach ($selected_fields as $field) {
             $value = $row[$field] ?? '';
             echo '<td>' . htmlspecialchars($value) . '</td>';
@@ -774,44 +715,56 @@ if (isset($_POST['print_report']) && !empty($report_data)) {
     }
     echo '</tbody>';
     echo '</table>';
+    
     if (!empty($footer_desc)) {
         echo '<div class="footer-desc">';
-        echo '<h2 style="font-size:20px; font-weight:bold; text-align:center;">' . nl2br(htmlspecialchars($footer_desc)) . '</h2>';
+        echo '<strong>توضیحات پایانی:</strong><br>' . nl2br(htmlspecialchars($footer_desc));
         echo '</div>';
     }
+    
     echo '<div class="print-info">';
     echo '<p>تعداد رکوردها: ' . count($report_data) . ' | تاریخ تولید: ' . gregorianToShamsi(date('Y-m-d')) . ' | زمان تولید: ' . date('H:i:s') . '</p>';
     echo '</div>';
+    
     echo '<div class="no-print" style="text-align: center; margin-top: 20px;">';
     echo '<button onclick="window.print()" style="padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">چاپ گزارش</button>';
-    echo '<a href="../index.php" style="display:inline-block;padding:10px 20px;background:#e74c3c;color:white;border-radius:5px;text-decoration:none;">بستن</a>';
+    echo '<a href="reportall.php" style="display:inline-block;padding:10px 20px;background:#e74c3c;color:white;border-radius:5px;text-decoration:none;">بستن</a>';
     echo '</div>';
+    
     echo '</body>';
     echo '</html>';
     exit;
 }
+
 // خروجی PDF
 if (isset($_POST['export_pdf']) && !empty($report_data)) {
     // پاک کردن output buffer
     ob_end_clean();
+    
     // ایجاد شیء PDF
     $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+    
     // تنظیمات سند
     $pdf->SetCreator('System');
     $pdf->SetAuthor('System');
     $pdf->SetTitle($report_title);
     $pdf->SetSubject('Report');
+    
     // حذف هدر و فوتر پیشفرض
     $pdf->setPrintHeader(false);
     $pdf->setPrintFooter(false);
+    
     // افزودن صفحه
     $pdf->AddPage();
+    
     // تنظیم فونت
     $pdf->SetFont('dejavusans', '', 10);
+    
     // عنوان گزارش
     $pdf->SetFont('dejavusans', 'B', 16);
     $pdf->Cell(0, 10, $report_title, 0, 1, 'C');
     $pdf->Ln(5);
+    
     // توضیحات هدر
     if (!empty($header_desc)) {
         $pdf->SetFont('dejavusans', 'B', 12);
@@ -820,25 +773,22 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
         $pdf->MultiCell(0, 10, $header_desc, 0, 'R');
         $pdf->Ln(5);
     }
+    
     // محاسبه عرض ستون‌ها
-    $col_count = count($selected_fields) + 2;
+    $col_count = count($selected_fields) + 1;
     if ($report_type === 'attendance' || $report_type === 'class') {
         $col_count += 4;
     }
     $col_width = 190 / $col_count;
+    
     // هدر جدول
     $pdf->SetFillColor(52, 73, 94);
     $pdf->SetTextColor(255);
     $pdf->SetFont('dejavusans', 'B', 10);
+    
     $pdf->Cell($col_width, 10, 'ردیف', 1, 0, 'C', true);
-    $pdf->Cell($col_width, 10, 'نوع', 1, 0, 'C', true);
     foreach ($selected_fields as $field) {
-        $field_name = '';
-        if (isset($teen_fields[$field])) {
-            $field_name = $teen_fields[$field];
-        } elseif (isset($adult_fields[$field])) {
-            $field_name = $adult_fields[$field];
-        }
+        $field_name = $users_fields[$field] ?? $field;
         $pdf->Cell($col_width, 10, $field_name, 1, 0, 'C', true);
     }
     if ($report_type === 'attendance' || $report_type === 'class') {
@@ -848,11 +798,13 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
         $pdf->Cell($col_width, 10, 'جمع', 1, 0, 'C', true);
     }
     $pdf->Ln();
+    
     // داده‌ها
     $pdf->SetTextColor(0);
     $pdf->SetFont('dejavusans', '', 9);
     $counter = 1;
     $fill = false;
+    
     foreach ($report_data as $row) {
         // رنگ پس‌زمینه متناوب
         if ($fill) {
@@ -861,8 +813,8 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
             $pdf->SetFillColor(255, 255, 255);
         }
         $fill = !$fill;
+        
         $pdf->Cell($col_width, 8, $counter++, 1, 0, 'C', true);
-        $pdf->Cell($col_width, 8, $row['type'], 1, 0, 'C', true);
         foreach ($selected_fields as $field) {
             $value = $row[$field] ?? '';
             $pdf->Cell($col_width, 8, $value, 1, 0, 'C', true);
@@ -875,7 +827,9 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
         }
         $pdf->Ln();
     }
+    
     $pdf->Ln(10);
+    
     // توضیحات فوتر
     if (!empty($footer_desc)) {
         $pdf->SetFont('dejavusans', 'B', 12);
@@ -884,9 +838,11 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
         $pdf->MultiCell(0, 10, $footer_desc, 0, 'R');
         $pdf->Ln(5);
     }
+    
     // اطلاعات پایین
     $pdf->SetFont('dejavusans', '', 8);
     $pdf->Cell(0, 10, 'تعداد رکوردها: ' . count($report_data) . ' | تاریخ تولید: ' . gregorianToShamsi(date('Y-m-d')) . ' | زمان تولید: ' . date('H:i:s'), 0, 1, 'C');
+    
     // خروجی PDF
     $pdf->Output('report_' . date('Y-m-d_H-i-s') . '.pdf', 'D');
     exit;
@@ -899,7 +855,6 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>گزارشات جامع</title>
     <link href="../assets/css/bootstrap.rtl.min.css" rel="stylesheet">
-    <link href="../assets/css/bootstrap-icons.css" rel="stylesheet" />
     <link href="../assets/css/font-awesome.min.css" rel="stylesheet">
     <link href="../assets/css/style.css" rel="stylesheet">
     <style>
@@ -925,9 +880,8 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
             position: relative;
         }
         .step.active {
-            background: #28a745; /* Changed to green to match completed steps */
+            background: #4a6cf7;
             color: white;
-            box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.3); /* Add a subtle glow effect */
         }
         .step.completed {
             background: #28a745;
@@ -1057,7 +1011,8 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                 <h2 class="mb-0">گزارشات جامع سیستم</h2>
             </div>
         </div>
-<?php if (!empty($saved_reports)): ?>
+
+        <?php if (!empty($saved_reports)): ?>
         <div class="saved-reports-section">
             <h4><i class="fas fa-save"></i> گزارشات ذخیره شده</h4>
             <div class="row">
@@ -1082,6 +1037,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
             </div>
         </div>
         <?php endif; ?>
+
         <!-- نمایش خطاها -->
         <?php if (isset($error)): ?>
             <div class="alert alert-danger alert-dismissible fade show">
@@ -1095,18 +1051,20 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         <?php endif; ?>
+
         <!-- نشانگر مراحل -->
         <div class="step-indicator">
-            <div class="step <?php echo $step >= 2 ? 'completed' : ($step == 1 ? 'active' : ''); ?>">1</div>
+            <div class="step <?php echo $step >= 1 ? 'completed' : ($step == 1 ? 'active' : ''); ?>">1</div>
+            <div class="step-line <?php echo $step >= 2 ? 'completed' : ''; ?>"></div>
+            <div class="step <?php echo $step >= 2 ? 'completed' : ($step == 2 ? 'active' : ''); ?>">2</div>
             <div class="step-line <?php echo $step >= 3 ? 'completed' : ''; ?>"></div>
-            <div class="step <?php echo $step >= 3 ? 'completed' : ($step == 2 ? 'active' : ''); ?>">2</div>
+            <div class="step <?php echo $step >= 3 ? 'completed' : ($step == 3 ? 'active' : ''); ?>">3</div>
             <div class="step-line <?php echo $step >= 4 ? 'completed' : ''; ?>"></div>
-            <div class="step <?php echo $step >= 4 ? 'completed' : ($step == 3 ? 'active' : ''); ?>">3</div>
-            <div class="step-line <?php echo $step >= 5 ? 'completed' : ''; ?>></div>
-            <div class="step <?php echo $step >= 5 ? 'completed' : ($step == 4 ? 'active' : ''); ?>">4</div>
-            <div class="step-line <?php echo $step >= 6 ? 'completed' : ''; ?>"></div>
-            <div class="step <?php echo $step >= 6 ? 'completed' : ($step == 5 ? 'active' : ''); ?>">5</div>
+            <div class="step <?php echo $step >= 4 ? 'completed' : ($step == 4 ? 'active' : ''); ?>">4</div>
+            <div class="step-line <?php echo $step >= 5 ? 'completed' : ''; ?>"></div>
+            <div class="step <?php echo $step >= 5 ? 'completed' : ($step == 5 ? 'active' : ''); ?>">5</div>
         </div>
+
         <form method="post" id="report-form">
             <!-- Step 1: انتخاب نوع گزارش -->
             <?php if ($step == 1): ?>
@@ -1119,7 +1077,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                                 <input class="form-check-input" type="radio" name="report_type" value="registration" id="registration" <?php echo $report_type === 'registration' ? 'checked' : ''; ?>>
                                 <label class="form-check-label w-100" for="registration">
                                     <h5><i class="fas fa-user-plus text-info"></i> لیست ثبت نام</h5>
-                                    <p class="text-muted mb-0">لیست افرادی که در بازه زمانی مشخص ثبت نام کرده‌اند</p>
+                                    <p class="text-muted mb-0">لیست کاربران با فیلتر کدسیستمی</p>
                                 </label>
                             </div>
                         </div>
@@ -1130,7 +1088,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                                 <input class="form-check-input" type="radio" name="report_type" value="attendance" id="attendance" <?php echo $report_type === 'attendance' ? 'checked' : ''; ?>>
                                 <label class="form-check-label w-100" for="attendance">
                                     <h5><i class="fas fa-clipboard-check text-warning"></i> لیست حضور و غیاب</h5>
-                                    <p class="text-muted mb-0">گزارش حضور، غیبت و مرخصی افراد</p>
+                                    <p class="text-muted mb-0">گزارش آمار حضور و غیاب کاربران</p>
                                 </label>
                             </div>
                         </div>
@@ -1141,29 +1099,38 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                                 <input class="form-check-input" type="radio" name="report_type" value="class" id="class" <?php echo $report_type === 'class' ? 'checked' : ''; ?>>
                                 <label class="form-check-label w-100" for="class">
                                     <h5><i class="fas fa-book text-success"></i> لیست دوره</h5>
-                                    <p class="text-muted mb-0">گزارش مربوط به دوره‌های خاص</p>
+                                    <p class="text-muted mb-0">گزارش کاربران دوره‌های خاص</p>
                                 </label>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="action-buttons">
+                    <a href="../index.php" class="btn btn-secondary btn-lg">
+                        <i class="fas fa-home"></i> صفحه اصلی
+                    </a>
                     <button type="submit" name="step1" class="btn btn-primary btn-lg">
                         مرحله بعد <i class="fas fa-arrow-left"></i>
                     </button>
                 </div>
             </div>
             <?php endif; ?>
-            
-            <!-- Step 2: انتخاب پارامترهای گزارش -->
+
+            <!-- Step 2: انتخاب تاریخ و دوره یا محدوده کدسیستمی -->
             <?php if ($step == 2): ?>
             <div class="form-section">
-                <h3 class="mb-4"><i class="fas fa-cogs"></i> مرحله 2: تنظیمات گزارش</h3>
+                <h3 class="mb-4"><i class="fas fa-calendar-alt"></i> مرحله 2: 
+                    <?php if ($report_type === 'registration'): ?>
+                        انتخاب محدوده کدسیستمی
+                    <?php else: ?>
+                        انتخاب بازه زمانی <?php echo ($report_type === 'class' || $report_type === 'attendance') ? 'و دوره' : ''; ?>
+                    <?php endif; ?>
+                </h3>
                 
                 <?php if ($report_type === 'registration'): ?>
                 <!-- برای گزارش ثبت نام: محدوده کدسیستمی -->
-                <div class="syscode-range mb-4">
-                    <h5 class="text-info mb-3"><i class="fas fa-sort-numeric-up"></i> محدوده کدسیستمی (اختیاری)</h5>
+                <div class="syscode-range">
+                    <h5 class="text-info mb-3"><i class="fas fa-sort-numeric-up"></i> محدوده کدسیستمی</h5>
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">از کدسیستمی:</label>
@@ -1177,6 +1144,10 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                                    value="<?php echo htmlspecialchars($syscode_to); ?>" dir="ltr">
                             <small class="form-text text-muted">خالی بگذارید برای همه کدهای کوچکتر</small>
                         </div>
+                    </div>
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-info-circle"></i>
+                        برای گزارش ثبت نام، محدوده کدسیستمی را مشخص کنید. اگر هر دو فیلد خالی باشد، همه کاربران نمایش داده می‌شوند.
                     </div>
                 </div>
                 <?php else: ?>
@@ -1202,10 +1173,10 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <?php if ($report_type === 'class'): ?>
+                    <?php if ($report_type === 'class' || $report_type === 'attendance'): ?>
                     <div class="col-12">
                         <label class="form-label">دوره:</label>
-                        <select name="class_id" class="form-select" required>
+                        <select name="class_id" class="form-select" <?php echo $report_type === 'class' ? 'required' : ''; ?>>
                             <option value="">-- انتخاب دوره --</option>
                             <?php foreach ($classes as $class): ?>
                                 <option value="<?php echo $class['ClassID']; ?>" <?php echo $selected_class == $class['ClassID'] ? 'selected' : ''; ?>>
@@ -1213,37 +1184,15 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                                 </option>
                             <?php endforeach; ?>
                         </select>
+                        <?php if ($report_type === 'attendance'): ?>
+                        <small class="form-text text-muted">برای گزارش حضور و غیاب کلیه کاربران، این فیلد را خالی بگذارید</small>
+                        <?php endif; ?>
                     </div>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>
                 
-                <!-- انتخاب گروه‌ها -->
-                <div class="row mt-4">
-                    <div class="col-12">
-                        <h5 class="mb-3"><i class="fas fa-users"></i> انتخاب گروه‌ها</h5>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" name="teens" id="teens" <?php echo $selected_teens ? 'checked' : ''; ?>>
-                                    <label class="form-check-label" for="teens">
-                                        <i class="fas fa-user-friends text-primary"></i> نوجوانان
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" name="adults" id="adults" <?php echo $selected_adults ? 'checked' : ''; ?>>
-                                    <label class="form-check-label" for="adults">
-                                        <i class="fas fa-user-tie text-success"></i> بزرگسالان
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="action-buttons mt-4">
+                <div class="action-buttons">
                     <a href="reportall.php?step=1" class="btn btn-secondary btn-lg">
                         <i class="fas fa-arrow-right"></i> مرحله قبل
                     </a>
@@ -1253,33 +1202,20 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                 </div>
             </div>
             <?php endif; ?>
+
             <!-- Step 3: انتخاب فیلدها -->
-           <?php if ($step == 3): ?>
+            <?php if ($step == 3): ?>
             <div class="form-section">
                 <h3 class="mb-4"><i class="fas fa-list-check"></i> مرحله 3: انتخاب فیلدهای گزارش</h3>
-                
-                <?php if ($report_type === 'registration'): ?>
-                <!-- فیلدهای جدول users برای گزارش ثبت نام -->
-                <?php
-                // دریافت فیلدهای جدول users
-                $user_fields = [];
-                $user_fields_query = "SHOW COLUMNS FROM users";
-                $result = $conn->query($user_fields_query);
-                while ($row = $result->fetch_assoc()) {
-                    $field_name = $row['Field'];
-                    $user_fields[$field_name] = $field_name; // می‌توانید نام‌های خوانا‌تر را در اینجا تنظیم کنید
-                }
-                ?>
                 <div class="fields-section">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i>
-                        فیلدهای مورد نظر خود برای نمایش در گزارش ثبت نام را انتخاب کنید.
+                        فیلدهای مورد نظر خود برای نمایش در گزارش را انتخاب کنید. فیلدهای انتخاب شده در خروجی چاپ و اکسل نمایش داده خواهند شد.
                     </div>
-                    
                     <div class="field-group">
-                        <h5><i class="fas fa-user text-primary"></i> فیلدهای کاربران</h5>
+                        <h5><i class="fas fa-users text-primary"></i> فیلدهای کاربران</h5>
                         <div class="row">
-                            <?php foreach ($user_fields as $field => $label): ?>
+                            <?php foreach ($users_fields as $field => $label): ?>
                             <div class="col-md-4 col-sm-6 field-checkbox">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="fields[]" 
@@ -1295,87 +1231,21 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                         </div>
                     </div>
                 </div>
-                <?php else: ?>
-                <!-- فیلدهای عادی برای سایر گزارشات -->
-                <div class="fields-section">
-                    <?php if ($selected_teens && $selected_adults): ?>
-                    <div class="alert alert-warning mb-4">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <strong>توجه:</strong> برای لیست نوجوانان و لیست بزرگسالان باید هر دو فیلدهای یکسان انتخاب شوند.
-                    </div>
-                    <?php endif; ?>
-                    
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i>
-                        فیلدهای مورد نظر خود برای نمایش در گزارش را انتخاب کنید. فیلدهای انتخاب شده در خروجی چاپ و اکسل نمایش داده خواهند شد.
-                    </div>
-                    
-                    <?php if ($selected_teens): ?>
-                    <div class="field-group">
-                        <h5><i class="fas fa-user-friends text-primary"></i> فیلدهای نوجوانان</h5>
-                        <div class="row">
-                            <?php foreach ($teen_fields as $field => $label): ?>
-                            <div class="col-md-4 col-sm-6 field-checkbox">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="fields[]" 
-                                           value="<?php echo $field; ?>" 
-                                           id="field_teen_<?php echo $field; ?>"
-                                           <?php echo in_array($field, $selected_fields) ? 'checked' : ''; ?>>
-                                    <label class="form-check-label" for="field_teen_<?php echo $field; ?>">
-                                        <?php echo $label; ?>
-                                    </label>
-                                </div>
-                            </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                    
-                    <?php if ($selected_adults): ?>
-                    <div class="field-group">
-                        <h5><i class="fas fa-user-tie text-success"></i> فیلدهای بزرگسالان</h5>
-                        <div class="row">
-                            <?php foreach ($adult_fields as $field => $label): ?>
-                            <div class="col-md-4 col-sm-6 field-checkbox">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="fields[]" 
-                                           value="<?php echo $field; ?>" 
-                                           id="field_adult_<?php echo $field; ?>"
-                                           <?php echo in_array($field, $selected_fields) ? 'checked' : ''; ?>>
-                                    <label class="form-check-label" for="field_adult_<?php echo $field; ?>">
-                                        <?php echo $label; ?>
-                                    </label>
-                                </div>
-                            </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                <?php endif; ?>
-                    <?php if ($report_type === 'attendance' || $report_type === 'class'): ?>
-                    <div class="field-group">
-                        <h5><i class="fas fa-clipboard-check text-warning"></i> فیلدهای حضور و غیاب</h5>
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-circle"></i>
-                            فیلدهای حضور و غیاب به طور خودکار به گزارش اضافه خواهند شد و نیازی به انتخاب ندارند.
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                </div>
                 <div class="action-buttons">
                     <a href="reportall.php?step=2" class="btn btn-secondary btn-lg">
                         <i class="fas fa-arrow-right"></i> مرحله قبل
                     </a>
-                    <button type="submit" name="step4" class="btn btn-primary btn-lg">
+                    <button type="submit" name="step3" class="btn btn-primary btn-lg">
                         مرحله بعد <i class="fas fa-arrow-left"></i>
                     </button>
                 </div>
             </div>
             <?php endif; ?>
+
             <!-- Step 4: توضیحات هدر و فوتر -->
             <?php if ($step == 4): ?>
             <div class="form-section">
-                <h3 class="mb-4"><i class="fas fa-file-alt"></i> مرحله 3: توضیحات گزارش</h3>
+                <h3 class="mb-4"><i class="fas fa-file-alt"></i> مرحله 4: توضیحات گزارش</h3>
                 <div class="description-section">
                     <h5 class="text-info mb-3"><i class="fas fa-heading"></i> توضیحات هدر گزارش</h5>
                     <div class="mb-4">
@@ -1394,16 +1264,18 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                     <a href="reportall.php?step=3" class="btn btn-secondary btn-lg">
                         <i class="fas fa-arrow-right"></i> مرحله قبل
                     </a>
-                    <button type="submit" name="step5" class="btn btn-primary btn-lg">
+                    <button type="submit" name="step4" class="btn btn-primary btn-lg">
                         مشاهده گزارش <i class="fas fa-chart-bar"></i>
                     </button>
                 </div>
             </div>
             <?php endif; ?>
+
             <!-- Step 5: نمایش گزارش و ذخیره -->
             <?php if ($step == 5): ?>
             <div class="form-section">
-                <h3 class="mb-4"><i class="fas fa-file-alt"></i> مرحله 4: گزارش نهایی</h3>
+                <h3 class="mb-4"><i class="fas fa-file-alt"></i> مرحله 5: گزارش نهایی</h3>
+                
                 <!-- فرم ذخیره گزارش -->
                 <div class="row mb-4">
                     <div class="col-12">
@@ -1431,6 +1303,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                         </div>
                     </div>
                 </div>
+                
                 <!-- دکمه‌های عملیات -->
                 <div class="action-buttons mb-4">
                     <button type="submit" name="edit_parameters" class="btn btn-warning btn-lg">
@@ -1448,31 +1321,26 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                     </button>
                     <?php endif; ?>
                 </div>
+                
                 <!-- نمایش گزارش -->
                 <?php if (!empty($report_data)): ?>
                 <div class="report-result">
                     <h4 class="text-center mb-4"><?php echo $report_title; ?></h4>
+                    
                     <?php if (!empty($header_desc)): ?>
                     <div class="alert alert-info">
                         <h5><i class="fas fa-heading"></i> توضیحات:</h5>
                         <p class="mb-0"><?php echo nl2br(htmlspecialchars($header_desc)); ?></p>
                     </div>
                     <?php endif; ?>
+                    
                     <div class="table-responsive">
                         <table class="table table-striped table-hover">
                             <thead class="table-dark-custom">
                                 <tr>
                                     <th>#</th>
-                                    <th>نوع</th>
                                     <?php foreach ($selected_fields as $field): ?>
-                                        <?php 
-                                        $field_name = '';
-                                        if (isset($teen_fields[$field])) {
-                                            $field_name = $teen_fields[$field];
-                                        } elseif (isset($adult_fields[$field])) {
-                                            $field_name = $adult_fields[$field];
-                                        }
-                                        ?>
+                                        <?php $field_name = $users_fields[$field] ?? $field; ?>
                                         <th><?php echo $field_name; ?></th>
                                     <?php endforeach; ?>
                                     <?php if ($report_type === 'attendance' || $report_type === 'class'): ?>
@@ -1488,11 +1356,6 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                                 <?php foreach ($report_data as $row): ?>
                                     <tr>
                                         <td><?php echo $counter++; ?></td>
-                                        <td>
-                                            <span class="badge <?php echo $row['type'] === 'نوجوان' ? 'bg-primary' : 'bg-success'; ?>">
-                                                <?php echo htmlspecialchars($row['type']); ?>
-                                            </span>
-                                        </td>
                                         <?php foreach ($selected_fields as $field): ?>
                                             <td><?php echo htmlspecialchars($row[$field] ?? ''); ?></td>
                                         <?php endforeach; ?>
@@ -1515,12 +1378,14 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                             </tbody>
                         </table>
                     </div>
+                    
                     <?php if (!empty($footer_desc)): ?>
                     <div class="alert alert-secondary mt-3">
                         <h5><i class="fas fa-file-alt"></i> توضیحات پایانی:</h5>
                         <p class="mb-0"><?php echo nl2br(htmlspecialchars($footer_desc)); ?></p>
                     </div>
                     <?php endif; ?>
+                    
                     <div class="mt-3 text-center text-muted">
                         <i class="fas fa-info-circle"></i>
                         تعداد رکوردها: <?php echo count($report_data); ?> |
@@ -1537,7 +1402,9 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
             <?php endif; ?>
         </form>
     </div>
+
     <?php include 'footer.php'; ?>
+    
     <script src="../assets/js/bootstrap.bundle.min.js"></script>
     <script>
         function toggleSelection(type) {
@@ -1550,6 +1417,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                 card.classList.remove('selected');
             }
         }
+        
         function selectReportType(type) {
             document.getElementById(type).checked = true;
             // Remove selected class from all cards
@@ -1559,6 +1427,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
             // Add selected class to clicked card
             document.getElementById(type).closest('.selection-card').classList.add('selected');
         }
+        
         // Initialize selection cards
         document.addEventListener('DOMContentLoaded', function() {
             // Checkboxes
@@ -1568,6 +1437,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                     card.classList.add('selected');
                 }
             });
+            
             // Radio buttons
             document.querySelectorAll('input[type="radio"]').forEach(radio => {
                 if (radio.checked) {

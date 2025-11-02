@@ -573,16 +573,25 @@ if (!function_exists('get_current_user') && function_exists('get_current_user_da
 function initialize_system_settings() {
     $conn = get_db_connection();
     
-    // Ensure settings table exists
-    $conn->query("CREATE TABLE IF NOT EXISTS SiteSettings (
-        SettingKey VARCHAR(64) PRIMARY KEY, 
-        SettingValue TEXT
-    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    // Check if connection is valid
+    if ($conn && $conn->connect_error) {
+        // If connection is broken, create new connection
+        require_once __DIR__ . '/../config/database.php';
+        global $conn;
+    }
     
-    // Set default background if not set
-    $current_bg = get_setting('background');
-    if (empty($current_bg)) {
-        set_setting('background', '/assets/images/background-pic1.jpeg');
+    // Ensure settings table exists
+    if ($conn) {
+        $conn->query("CREATE TABLE IF NOT EXISTS SiteSettings (
+            SettingKey VARCHAR(64) PRIMARY KEY, 
+            SettingValue TEXT
+        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        
+        // Set default background if not set
+        $current_bg = get_setting('background');
+        if (empty($current_bg)) {
+            set_setting('background', '/assets/images/background-pic1.jpeg');
+        }
     }
 }
 ?>

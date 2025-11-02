@@ -1,34 +1,35 @@
-﻿<?php
-
+<?php
 // بررسی دسترسی کاربر
 require_once __DIR__ . '/check_access.php';
 requireAccess(basename(__FILE__));
-if (session_status() === PHP_SESSION_NONE) { session_start(); }
+if (session_status() === PHP_SESSION_NONE) { 
+    session_start(); 
+}
 require_once __DIR__ . '/../config/database.php';
 
-// Ensure Class table exists
-$conn->query("CREATE TABLE IF NOT EXISTS `Class` (
+// Ensure Class table exists with correct structure
+$conn->query("CREATE TABLE IF NOT EXISTS `class` (
   `ClassID` int(11) NOT NULL AUTO_INCREMENT,
-  `ClassName` varchar(100) NOT NULL,
-  `ClassDateStart` date DEFAULT NULL,
-  `ClassDateEnd` date DEFAULT NULL,
-  `ClassTime` varchar(20) DEFAULT NULL,
-  `ClassTeacher` varchar(100) DEFAULT NULL,
-  `ClassPlace` varchar(100) DEFAULT NULL,
-  `ClassDescription` text DEFAULT NULL,
-  `CalssUsers` text DEFAULT NULL,
+  `ClassName` varchar(100) NOT NULL COMMENT 'نام دوره',
+  `ClassDateStart` date DEFAULT NULL COMMENT 'تاریخ شروع دوره',
+  `ClassDateEnd` date DEFAULT NULL COMMENT 'تاریخ پایان دوره',
+  `ClassTime` varchar(20) DEFAULT NULL COMMENT 'ساعت دوره',
+  `ClassTeacher` varchar(100) DEFAULT NULL COMMENT 'مربی دوره',
+  `ClassPlace` varchar(100) DEFAULT NULL COMMENT 'مکان دوره',
+  `ClassDescription` text DEFAULT NULL COMMENT 'توضیحات دوره',
+  `CalssUsers` text DEFAULT NULL COMMENT 'کاربران دوره',
   PRIMARY KEY (`ClassID`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
 $errors = [];
 $success = '';
 
-// Handle search functionality first
-$usersSearch = $_POST['users_search'] ?? '';
+// Handle search functionality
+$searchQuery = $_POST['search_query'] ?? '';
 
 // Clear search if needed
-if (isset($_POST['clear_users_search'])) {
-    $usersSearch = '';
+if (isset($_POST['clear_search'])) {
+    $searchQuery = '';
 }
 
 // Handle add new class
@@ -48,7 +49,7 @@ $classData = [
 $editId = 0;
 if ($editMode) {
     $editId = (int)$_GET['edit'];
-    $stmt = $conn->prepare("SELECT * FROM `Class` WHERE ClassID = ?");
+    $stmt = $conn->prepare("SELECT * FROM `class` WHERE ClassID = ?");
     $stmt->bind_param('i', $editId);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -61,8 +62,8 @@ if ($editMode) {
     $stmt->close();
 }
 
-// Handle form submission - ONLY if not a search request
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['search_teen']) && !isset($_POST['search_adult']) && !isset($_POST['clear_teen_search']) && !isset($_POST['clear_adult_search'])) {
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['search_users']) && !isset($_POST['clear_search'])) {
     
     // Check if it's edit mode from hidden field
     if (isset($_POST['edit_id']) && is_numeric($_POST['edit_id']) && $_POST['edit_id'] > 0) {
@@ -106,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['search_teen']) && !i
     if (empty($errors)) {
         if ($editMode) {
             // Update existing class
-            $stmt = $conn->prepare("UPDATE `Class` SET ClassName=?, ClassDateStart=?, ClassDateEnd=?, ClassTime=?, ClassTeacher=?, ClassPlace=?, ClassDescription=?, CalssUsers=? WHERE ClassID=?");
+            $stmt = $conn->prepare("UPDATE `class` SET ClassName=?, ClassDateStart=?, ClassDateEnd=?, ClassTime=?, ClassTeacher=?, ClassPlace=?, ClassDescription=?, CalssUsers=? WHERE ClassID=?");
             if ($stmt) {
                 $stmt->bind_param('ssssssssi', $ClassName, $ClassDateStart, $ClassDateEnd, $ClassTime, $ClassTeacher, $ClassPlace, $ClassDescription, $CalssUsers, $editId);
                 if ($stmt->execute()) {
@@ -121,8 +122,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['search_teen']) && !i
                 $errors[] = 'خطا در آماده‌سازی کوئری به‌روزرسانی: ' . $conn->error;
             }
         } else {
-            // Insert new class - مهم: ClassID حذف شده تا AUTO_INCREMENT کار کند
-            $stmt = $conn->prepare("INSERT INTO `Class` (ClassName, ClassDateStart, ClassDateEnd, ClassTime, ClassTeacher, ClassPlace, ClassDescription, CalssUsers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            // Insert new class
+            $stmt = $conn->prepare("INSERT INTO `class` (ClassName, ClassDateStart, ClassDateEnd, ClassTime, ClassTeacher, ClassPlace, ClassDescription, CalssUsers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
             if ($stmt) {
                 $stmt->bind_param('ssssssss', $ClassName, $ClassDateStart, $ClassDateEnd, $ClassTime, $ClassTeacher, $ClassPlace, $ClassDescription, $CalssUsers);
                 if ($stmt->execute()) {
@@ -146,15 +147,23 @@ if (isset($_GET['success']) && isset($_SESSION['success_message'])) {
     unset($_SESSION['success_message']);
 }
 
-// Build queries with search
-$usersQuery = "SELECT UserID as id, UserName as firstName, UserFamily as lastName, UserSysCode as sysCode, UserMelli as melli, 'users' as type FROM users";
-if (!empty($usersSearch)) {
-    $usersQuery .= " WHERE UserSysCode LIKE '%" . $conn->real_escape_string($usersSearch) . "%' OR UserMelli LIKE '%" . $conn->real_escape_string($usersSearch) . "%'";
+// Build users query with search
+$usersWhere = "1=1";
+if (!empty($searchQuery)) {
+    $usersWhere .= " AND (UserSysCode LIKE '%" . $conn->real_escape_string($searchQuery) . "%' 
+                        OR UserMelli LIKE '%" . $conn->real_escape_string($searchQuery) . "%'
+                        OR UserName LIKE '%" . $conn->real_escape_string($searchQuery) . "%'
+                        OR UserFamily LIKE '%" . $conn->real_escape_string($searchQuery) . "%')";
 }
-$usersQuery .= " ORDER BY CAST(UserSysCode AS UNSIGNED)";
+
+$usersQuery = "SELECT UserID, UserSysCode, UserMelli, UserName, UserFamily
+               FROM users 
+               WHERE {$usersWhere} 
+               ORDER BY CAST(UserSysCode AS UNSIGNED)";
 $users = $conn->query($usersQuery);
 
-$rs = $conn->query("SELECT * FROM `Class` ORDER BY ClassID DESC");
+// Get all classes
+$classes = $conn->query("SELECT * FROM `class` ORDER BY ClassID DESC");
 
 // Parse selected users for edit mode
 $selectedUsers = [];
@@ -168,8 +177,8 @@ if (!empty($classData['CalssUsers']) && $classData['CalssUsers'] !== '[]') {
 // Create array for quick lookup
 $selectedUserIds = [];
 foreach ($selectedUsers as $user) {
-    if (isset($user['id']) && isset($user['type'])) {
-        $selectedUserIds[$user['type'] . '_' . $user['id']] = true;
+    if (isset($user['id'])) {
+        $selectedUserIds[$user['id']] = true;
     }
 }
 ?>
@@ -178,37 +187,111 @@ foreach ($selectedUsers as $user) {
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>مدیریت دوره</title>
+    <title>مدیریت دوره - سیستم مدیریت</title>
     <link href="../assets/css/bootstrap.rtl.min.css" rel="stylesheet" />
     <link href="../assets/css/bootstrap-icons.css" rel="stylesheet" />
     <link href="../assets/css/style.css" rel="stylesheet" />
+    <style>
+        .user-list-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+        }
+        .user-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1px;
+            background: #f8f9fa;
+        }
+        .user-item {
+            padding: 12px 15px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-bottom: 1px solid #f8f9fa;
+        }
+        .user-item:hover {
+            background-color: #f8f9fa;
+        }
+        .user-item.selected {
+            background-color: #e7f3ff;
+            border-right: 3px solid #0d6efd;
+        }
+        .user-checkbox {
+            margin-left: 10px;
+        }
+        .user-info {
+            flex: 1;
+        }
+        .user-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .user-details {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+        .user-code {
+            background: #f8f9fa;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+        .selection-info {
+            background: #e7f3ff;
+            border: 1px solid #b6d4fe;
+            border-radius: 8px;
+        }
+        .class-management-page .content-box {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        @media (max-width: 768px) {
+            .user-list {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body class="class-management-page">
 <?php include __DIR__ . '/header.php'; ?>
 
-<div class="container main-container">
+<div class="container main-container" style="margin-top: 100px; margin-bottom: 40px;">
     <div class="content-box">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <div class="d-flex justify-content-start align-items-center mb-3">
-                <a href="../index.php" class="btn btn-outline-secondary d-flex align-items-center ms-2">
-                    <span class="me-2">بستن</span>
-                    <span aria-hidden="true" class="fs-5">×</span>
+            <div class="d-flex align-items-center">
+                <a href="../index.php" class="btn btn-outline-secondary d-flex align-items-center me-3">
+                    <i class="bi bi-arrow-right me-2"></i>
+                    <span>بستن</span>
                 </a>
-                <h2 class="mb-0">مدیریت دوره</h2>
+                <h2 class="mb-0">
+                    <i class="bi bi-calendar-check me-2"></i>مدیریت دوره‌ها
+                </h2>
             </div>
+            <?php if ($editMode): ?>
+                <span class="badge bg-warning text-dark">
+                    <i class="bi bi-pencil me-1"></i>حالت ویرایش
+                </span>
+            <?php endif; ?>
         </div>
 
         <?php if ($success): ?>
             <div class="alert alert-success alert-dismissible fade show">
-                <i class="bi bi-check-circle-fill"></i> <?php echo $success; ?>
+                <i class="bi bi-check-circle-fill me-2"></i> 
+                <?php echo $success; ?>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         <?php endif; ?>
         
-        <?php if ($errors): ?>
+        <?php if (!empty($errors)): ?>
             <div class="alert alert-danger alert-dismissible fade show">
-                <i class="bi bi-exclamation-triangle-fill"></i> 
-                <?php echo implode('<br>', $errors); ?>
+                <i class="bi bi-exclamation-triangle-fill me-2"></i> 
+                <?php foreach ($errors as $error): ?>
+                    <?php echo $error; ?><br>
+                <?php endforeach; ?>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         <?php endif; ?>
@@ -220,156 +303,184 @@ foreach ($selectedUsers as $user) {
             
             <!-- بخش اطلاعات اصلی دوره -->
             <div class="row g-3 mb-4">
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <label class="form-label">نام دوره <span class="text-danger">*</span></label>
-                    <input name="ClassName" class="form-control" 
-                           value="<?php echo htmlspecialchars($classData['ClassName'] ?? ''); ?>" required>
+                    <input type="text" name="ClassName" class="form-control" 
+                           value="<?php echo htmlspecialchars($classData['ClassName'] ?? ''); ?>" 
+                           placeholder="نام دوره را وارد کنید" required>
                 </div>
                 
-                <div class="col-md-4">
-                    <label class="form-label">تاریخ شروع</label>
-                    <input type="date" name="ClassDateStart" class="form-control date-input" 
-                           value="<?php echo !empty($classData['ClassDateStart']) && $classData['ClassDateStart'] != '0000-00-00' ? $classData['ClassDateStart'] : ''; ?>">
-                    <small class="form-text text-muted">فرمت: YYYY-MM-DD</small>
-                </div>
-                
-                <div class="col-md-4">
-                    <label class="form-label">تاریخ پایان</label>
-                    <input type="date" name="ClassDateEnd" class="form-control date-input" 
-                           value="<?php echo !empty($classData['ClassDateEnd']) && $classData['ClassDateEnd'] != '0000-00-00' ? $classData['ClassDateEnd'] : ''; ?>">
-                    <small class="form-text text-muted">فرمت: YYYY-MM-DD</small>
-                </div>
-                
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">ساعت دوره</label>
-                    <input name="ClassTime" class="form-control" placeholder="مثال: 16:00-18:00" 
+                    <input type="text" name="ClassTime" class="form-control" placeholder="مثال: 16:00-18:00" 
                            value="<?php echo htmlspecialchars($classData['ClassTime'] ?? ''); ?>">
                 </div>
                 
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">مربی دوره</label>
-                    <input name="ClassTeacher" class="form-control" 
+                    <input type="text" name="ClassTeacher" class="form-control" 
                            value="<?php echo htmlspecialchars($classData['ClassTeacher'] ?? ''); ?>">
                 </div>
                 
                 <div class="col-md-4">
+                    <label class="form-label">تاریخ شروع</label>
+                    <input type="date" name="ClassDateStart" class="form-control" 
+                           value="<?php echo !empty($classData['ClassDateStart']) && $classData['ClassDateStart'] != '0000-00-00' ? $classData['ClassDateStart'] : ''; ?>">
+                </div>
+                
+                <div class="col-md-4">
+                    <label class="form-label">تاریخ پایان</label>
+                    <input type="date" name="ClassDateEnd" class="form-control" 
+                           value="<?php echo !empty($classData['ClassDateEnd']) && $classData['ClassDateEnd'] != '0000-00-00' ? $classData['ClassDateEnd'] : ''; ?>">
+                </div>
+                
+                <div class="col-md-4">
                     <label class="form-label">مکان دوره</label>
-                    <input name="ClassPlace" class="form-control" 
+                    <input type="text" name="ClassPlace" class="form-control" 
                            value="<?php echo htmlspecialchars($classData['ClassPlace'] ?? ''); ?>">
+                </div>
+                
+                <div class="col-12">
+                    <label class="form-label">توضیحات دوره</label>
+                    <textarea name="ClassDescription" class="form-control" rows="2" placeholder="توضیحات مربوط به دوره..."><?php echo htmlspecialchars($classData['ClassDescription'] ?? ''); ?></textarea>
                 </div>
             </div>
 
             <!-- بخش انتخاب کاربران -->
             <div class="row mb-4">
                 <div class="col-12">
-                    <h5 class="mb-3">انتخاب کاربران دوره</h5>
-                    <div class="alert selection-info">
-                        <i class="bi bi-people-fill"></i> 
-                        کاربران انتخاب شده: <span id="selected-count"><?php echo count($selectedUsers); ?></span>
-                        <span class="badge bg-light text-dark ms-2" id="users-count">0 کاربران</span>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">
+                            <i class="bi bi-people-fill me-2"></i>انتخاب کاربران دوره
+                        </h5>
+                        <div class="selection-info px-3 py-2">
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            <span class="fw-bold">کاربران انتخاب شده: </span>
+                            <span id="selected-count" class="badge bg-primary"><?php echo count($selectedUsers); ?></span>
+                        </div>
                     </div>
-                </div>
 
-                <!-- لیست کاربران -->
-                <div class="col-12 mb-4">
-                    <div class="card h-100">
+                    <!-- جستجوی کاربران -->
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-10">
+                                    <label class="form-label">جستجوی کاربران</label>
+                                    <input type="text" 
+                                           name="search_query" 
+                                           class="form-control" 
+                                           placeholder="جستجو با نام، نام خانوادگی، کدسیستمی یا کدملی..."
+                                           value="<?php echo htmlspecialchars($searchQuery); ?>">
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" class="btn btn-primary w-100" name="search_users">
+                                            <i class="bi bi-search me-1"></i>جستجو
+                                        </button>
+                                        <?php if (!empty($searchQuery)): ?>
+                                            <button type="submit" class="btn btn-outline-secondary" name="clear_search" title="پاک کردن جستجو">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- لیست کاربران -->
+                    <div class="card">
                         <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                             <div>
-                                <i class="bi bi-people-fill me-2"></i>لیست کاربران
-                            </div>
-                            <?php if ($users): ?>
-                                <span class="badge bg-light text-dark"><?php echo $users->num_rows; ?> نفر</span>
-                            <?php endif; ?>
-                        </div>
-                        
-                        <!-- جستجوی نوجوانان -->
-                        <div class="card-body py-2 border-bottom">
-                            <div class="d-flex gap-2">
-                                <input type="text" 
-                                       name="teen_search" 
-                                       class="form-control form-control-sm" 
-                                       placeholder="جستجو با کدسیستمی یا کد ملی..."
-                                       value="<?php echo htmlspecialchars($usersSearch); ?>"
-                                       dir="ltr">
-                                <button type="submit" class="btn btn-success btn-sm" name="search_teen">
-                                    <i class="bi bi-search"></i>
-                                </button>
-                                <?php if (!empty($teenSearch)): ?>
-                                    <button type="submit" class="btn btn-outline-secondary btn-sm" name="clear_teen_search">
-                                        <i class="bi bi-x"></i>
-                                    </button>
+                                <i class="bi bi-list-ul me-2"></i>
+                                لیست کاربران
+                                <?php if ($users): ?>
+                                    <span class="badge bg-light text-dark ms-2"><?php echo $users->num_rows; ?> کاربر</span>
                                 <?php endif; ?>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="select-all">
+                                <label class="form-check-label text-white" for="select-all">
+                                    انتخاب همه
+                                </label>
                             </div>
                         </div>
                         
                         <div class="card-body p-0">
-                            <div class="user-list">
-                                <?php
-                                if ($users && $users->num_rows > 0) {
-                                    $users->data_seek(0);
-                                    $teenCount = 0;
-                                    while($user = $users->fetch_assoc()) {
-                                        $key = 'teen_' . $user['id'];
-                                        $isSelected = isset($selectedUserIds[$key]);
-                                        if ($isSelected) $teenCount++;
-                                ?>
-                                <div class="user-item <?php echo $isSelected ? 'selected' : ''; ?>" 
-                                     data-id="<?php echo $user['id']; ?>" 
-                                     data-type="<?php echo $user['type']; ?>">
-                                    <input class="form-check-input user-checkbox" type="checkbox" 
-                                           value='<?php echo json_encode(['id' => $user['id'], 'type' => 'teen']); ?>'
-                                           id="teen_<?php echo $user['id']; ?>"
-                                           <?php echo $isSelected ? 'checked' : ''; ?>>
-                                    <label class="form-check-label d-flex align-items-center w-100" for="teen_<?php echo $user['id']; ?>">
-                                        <span class="user-name ms-2">
-                                            <i class="bi bi-person-circle me-2"></i>
-                                            <?php echo htmlspecialchars($user['firstName'] . ' ' . $user['lastName']); ?>
-                                        </span>
-                                        <div class="d-flex flex-column align-items-start ms-2">
-                                            <span class="user-code"><?php echo htmlspecialchars($user['sysCode']); ?></span>
-                                            <small class="text-muted"><?php echo htmlspecialchars($user['melli']); ?></small>
+                            <div class="user-list-container">
+                                <div class="user-list">
+                                    <?php
+                                    if ($users && $users->num_rows > 0) {
+                                        $users->data_seek(0);
+                                        while($user = $users->fetch_assoc()) {
+                                            $isSelected = isset($selectedUserIds[$user['UserID']]);
+                                    ?>
+                                    <div class="user-item <?php echo $isSelected ? 'selected' : ''; ?>" 
+                                         data-user-id="<?php echo $user['UserID']; ?>">
+                                        <div class="d-flex align-items-center">
+                                            <input class="form-check-input user-checkbox" 
+                                                   type="checkbox" 
+                                                   value='<?php echo json_encode([
+                                                       'id' => $user['UserID'],
+                                                       'code' => $user['UserSysCode'],
+                                                       'name' => $user['UserName'] . ' ' . $user['UserFamily']
+                                                   ]); ?>'
+                                                   id="user_<?php echo $user['UserID']; ?>"
+                                                   <?php echo $isSelected ? 'checked' : ''; ?>>
+                                            <div class="user-info ms-3">
+                                                <div class="user-name">
+                                                    <?php echo htmlspecialchars($user['UserName'] . ' ' . $user['UserFamily']); ?>
+                                                </div>
+                                                <div class="user-details">
+                                                    <span class="me-3">
+                                                        کدسیستمی: <span class="user-code"><?php echo htmlspecialchars($user['UserSysCode']); ?></span>
+                                                    </span>
+                                                    <span>
+                                                        کدملی: <span class="user-code"><?php echo htmlspecialchars($user['UserMelli']); ?></span>
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </label>
-                                </div>
-                                <?php
-                                    }
-                                } else {
-                                    echo '<div class="p-3 text-muted text-center">';
-                                    if (!empty($teenSearch)) {
-                                        echo '<i class="bi bi-search me-2"></i>هیچ نوجوانی با مشخصات جستجو شده یافت نشد';
+                                    </div>
+                                    <?php
+                                        }
                                     } else {
-                                        echo '<i class="bi bi-people"></i> نوجوانی یافت نشد';
+                                        echo '<div class="p-4 text-center text-muted w-100">';
+                                        if (!empty($searchQuery)) {
+                                            echo '<i class="bi bi-search display-4 d-block mb-3"></i>';
+                                            echo '<h5>هیچ کاربری یافت نشد</h5>';
+                                            echo '<p class="mb-0">لطفا عبارت جستجو را تغییر دهید</p>';
+                                        } else {
+                                            echo '<i class="bi bi-people display-4 d-block mb-3"></i>';
+                                            echo '<h5>کاربری یافت نشد</h5>';
+                                            echo '<p class="mb-0">هیچ کاربری در سیستم ثبت نشده است</p>';
+                                        }
+                                        echo '</div>';
                                     }
-                                    echo '</div>';
-                                }
-                                ?>
+                                    ?>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
             <input type="hidden" name="CalssUsers" id="CalssUsers" value="<?php echo htmlspecialchars($classData['CalssUsers'] ?? '[]'); ?>">
             
-            <!-- بخش توضیحات -->
-            <div class="row mb-4">
-                <div class="col-12">
-                    <label class="form-label">توضیحات دوره</label>
-                    <textarea name="ClassDescription" class="form-control" rows="3" placeholder="توضیحات مربوط به دوره..."><?php echo htmlspecialchars($classData['ClassDescription'] ?? ''); ?></textarea>
-                </div>
-            </div>
-            
             <!-- دکمه‌های عملیات -->
-            <div class="row">
+            <div class="row mt-4">
                 <div class="col-12">
-                    <button type="submit" class="btn btn-primary btn-lg" name="submit_class">
-                        <i class="bi <?php echo $editMode ? 'bi-check-circle' : 'bi-plus-circle'; ?> me-2"></i>
-                        <?php echo $editMode ? 'ذخیره تغییرات' : 'افزودن دوره'; ?>
-                    </button>
-                    <?php if ($editMode): ?>
-                        <a href="class.php" class="btn btn-secondary btn-lg">
-                            <i class="bi bi-x-circle me-2"></i>انصراف
-                        </a>
-                    <?php endif; ?>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg" name="submit_class">
+                            <i class="bi <?php echo $editMode ? 'bi-check-circle' : 'bi-plus-circle'; ?> me-2"></i>
+                            <?php echo $editMode ? 'ذخیره تغییرات' : 'ایجاد دوره جدید'; ?>
+                        </button>
+                        <?php if ($editMode): ?>
+                            <a href="class.php" class="btn btn-secondary btn-lg">
+                                <i class="bi bi-x-circle me-2"></i>انصراف
+                            </a>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
         </form>
@@ -377,89 +488,108 @@ foreach ($selectedUsers as $user) {
         <!-- جدول نمایش دوره‌ها -->
         <div class="row mt-5">
             <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0">لیست دوره‌ها</h5>
-                    <span class="badge bg-primary"><?php echo $rs ? $rs->num_rows : 0; ?> دوره</span>
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="mb-0">
+                        <i class="bi bi-list-task me-2"></i>لیست دوره‌ها
+                    </h4>
+                    <span class="badge bg-primary fs-6">
+                        <?php echo $classes ? $classes->num_rows : 0; ?> دوره
+                    </span>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-hover table-bordered">
-                        <thead>
-                            <tr class="table-primary">
-                                <th width="50" class="text-center">#</th>
-                                <th>نام دوره</th>
-                                <th width="150">مربی</th>
-                                <th width="120" class="text-center">تاریخ شروع</th>
-                                <th width="120" class="text-center">تاریخ پایان</th>
-                                <th width="120" class="text-center">کاربران</th>
-                                <th width="100" class="text-center">عملیات</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        <?php 
-                        if ($rs && $rs->num_rows > 0): 
-                            $rs->data_seek(0);
-                            while($row = $rs->fetch_assoc()): 
+                
+                <?php if ($classes && $classes->num_rows > 0): ?>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered table-striped">
+                            <thead class="table">
+                                <tr>
+                                    <th width="60" class="text-center">#</th>
+                                    <th>نام دوره</th>
+                                    <th width="150">مربی</th>
+                                    <th width="120" class="text-center">تاریخ شروع</th>
+                                    <th width="120" class="text-center">تاریخ پایان</th>
+                                    <th width="100" class="text-center">ساعت</th>
+                                    <th width="100" class="text-center">کاربران</th>
+                                    <th width="90" class="text-center">عملیات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php 
+                            $classes->data_seek(0);
+                            while($row = $classes->fetch_assoc()): 
                                 $usersCount = 0;
-                                $teensCount = 0;
-                                $adultsCount = 0;
-                                
                                 if (!empty($row['CalssUsers']) && $row['CalssUsers'] !== '[]') {
                                     $users = json_decode($row['CalssUsers'], true);
                                     if (is_array($users)) {
                                         $usersCount = count($users);
-                                        foreach ($users as $user) {
-                                            if ($user['type'] === 'teen') $teensCount++;
-                                            if ($user['type'] === 'adult') $adultsCount++;
-                                        }
                                     }
                                 }
-                        ?>
-                            <tr>
-                                <td class="text-center fw-bold text-muted"><?php echo $row['ClassID']; ?></td>
-                                <td>
-                                    <div class="fw-bold text-dark"><?php echo htmlspecialchars($row['ClassName']); ?></div>
-                                </td>
-                                <td>
-                                    <span class="text-primary"><?php echo htmlspecialchars($row['ClassTeacher']); ?></span>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge bg-light text-dark border"><?php echo !empty($row['ClassDateStart']) && $row['ClassDateStart'] != '0000-00-00' ? $row['ClassDateStart'] : '-'; ?></span>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge bg-light text-dark border"><?php echo !empty($row['ClassDateEnd']) && $row['ClassDateEnd'] != '0000-00-00' ? $row['ClassDateEnd'] : '-'; ?></span>
-                                </td>
-                                <td class="text-center">
-                                    <div class="d-flex justify-content-center gap-1">
-                                        <?php if ($teensCount > 0): ?>
-                                            <span class="badge bg-primary" title="نوجوانان"><?php echo $teensCount; ?></span>
+                            ?>
+                                <tr>
+                                    <td class="text-center fw-bold"><?php echo $row['ClassID']; ?></td>
+                                    <td>
+                                        <div class="fw-bold text-primary"><?php echo htmlspecialchars($row['ClassName']); ?></div>
+                                        <?php if (!empty($row['ClassPlace'])): ?>
+                                            <small class="text-muted">
+                                                <i class="bi bi-geo-alt me-1"></i><?php echo htmlspecialchars($row['ClassPlace']); ?>
+                                            </small>
                                         <?php endif; ?>
-                                        <?php if ($adultsCount > 0): ?>
-                                            <span class="badge bg-success" title="بزرگسالان"><?php echo $adultsCount; ?></span>
+                                    </td>
+                                    <td>
+                                        <?php if (!empty($row['ClassTeacher'])): ?>
+                                            <span class="text-dark"><?php echo htmlspecialchars($row['ClassTeacher']); ?></span>
+                                        <?php else: ?>
+                                            <span class="text-muted">-</span>
                                         <?php endif; ?>
-                                        <?php if ($usersCount === 0): ?>
-                                            <span class="badge bg-secondary">0</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <?php if (!empty($row['ClassDateStart']) && $row['ClassDateStart'] != '0000-00-00'): ?>
+                                            <span class="badge bg-light text-dark border"><?php echo $row['ClassDateStart']; ?></span>
+                                        <?php else: ?>
+                                            <span class="text-muted">-</span>
                                         <?php endif; ?>
-                                    </div>
-                                </td>
-                                <td class="text-center">
-                                    <a href="?edit=<?php echo $row['ClassID']; ?>" class="btn btn-warning btn-sm" title="ویرایش دوره">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                        <?php endwhile; else: ?>
-                            <tr>
-                                <td colspan="7" class="text-center py-5 text-muted">
-                                    <i class="bi bi-calendar-x display-4 d-block mb-3"></i>
-                                    <span class="fs-5">دوره‌ای ثبت نشده است</span>
-                                    <br>
-                                    <small class="text-muted">برای ایجاد دوره جدید از فرم بالا استفاده کنید</small>
-                                </td>
-                            </tr>
-                        <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <?php if (!empty($row['ClassDateEnd']) && $row['ClassDateEnd'] != '0000-00-00'): ?>
+                                            <span class="badge bg-light text-dark border"><?php echo $row['ClassDateEnd']; ?></span>
+                                        <?php else: ?>
+                                            <span class="text-muted">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-center">
+                                        <?php if (!empty($row['ClassTime'])): ?>
+                                            <span class="badge bg-secondary"><?php echo htmlspecialchars($row['ClassTime']); ?></span>
+                                        <?php else: ?>
+                                            <span class="text-muted">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge <?php echo $usersCount > 0 ? 'bg-success' : 'bg-secondary'; ?>">
+                                            <?php echo $usersCount; ?> نفر
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="?edit=<?php echo $row['ClassID']; ?>" class="btn btn-warning btn-sm" title="ویرایش دوره">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <a href="rollcalluser.php?class_id=<?php echo $row['ClassID']; ?>" class="btn btn-info btn-sm" title="حضور و غیاب">
+                                            <i class="bi bi-clipboard-check"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            <?php endwhile; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else: ?>
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-calendar-x display-1 d-block mb-3"></i>
+                        <h4 class="mb-3">دوره‌ای ثبت نشده است</h4>
+                        <p class="mb-4">برای ایجاد دوره جدید از فرم بالا استفاده کنید</p>
+                        <a href="class.php" class="btn btn-primary btn-lg">
+                            <i class="bi bi-plus-circle me-2"></i>ایجاد اولین دوره
+                        </a>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -474,19 +604,8 @@ foreach ($selectedUsers as $user) {
 $(document).ready(function() {
     // Update selection counts
     function updateSelectionCounts() {
-        const totalCount = $('input.user-checkbox:checked').length;
-        const teensCount = $('input.user-checkbox:checked').filter(function() {
-            const userData = JSON.parse($(this).val());
-            return userData.type === 'teen';
-        }).length;
-        const adultsCount = $('input.user-checkbox:checked').filter(function() {
-            const userData = JSON.parse($(this).val());
-            return userData.type === 'adult';
-        }).length;
-        
-        $('#selected-count').text(totalCount);
-        $('#teens-count').text(teensCount + ' نوجوان');
-        $('#adults-count').text(adultsCount + ' بزرگسال');
+        const selectedCount = $('input.user-checkbox:checked').length;
+        $('#selected-count').text(selectedCount);
     }
     
     // Update the hidden input with selected users
@@ -496,14 +615,12 @@ $(document).ready(function() {
         $('input.user-checkbox:checked').each(function() {
             try {
                 const userData = JSON.parse($(this).val());
-                const $item = $(this).closest('.user-item');
-                
-                if (userData && userData.id && userData.type) {
+                if (userData && userData.id) {
                     selectedUsers.push({
                         id: userData.id.toString(),
-                        type: userData.type,
-                        name: $item.find('.user-name').text().trim(),
-                        code: $item.find('.user-code').text().trim()
+                        code: userData.code || '',
+                        name: userData.name || '',
+                        type: 'teen'
                     });
                 }
             } catch (e) {
@@ -529,17 +646,23 @@ $(document).ready(function() {
     
     // Toggle selection on item click
     $(document).on('click', '.user-item', function(e) {
-        if (!$(e.target).is('input') && !$(e.target).is('label') && !$(e.target).is('i')) {
+        if (!$(e.target).is('input') && !$(e.target).is('label')) {
             const $checkbox = $(this).find('input.user-checkbox');
             $checkbox.prop('checked', !$checkbox.prop('checked')).trigger('change');
         }
+    });
+    
+    // Select all functionality
+    $('#select-all').on('change', function() {
+        const isChecked = $(this).is(':checked');
+        $('input.user-checkbox').prop('checked', isChecked).trigger('change');
     });
     
     // Handle form submission
     $('#class-form').on('submit', function(e) {
         // Only process if it's the main submit button
         const submitter = $(e.originalEvent?.submitter);
-        if (submitter.length && (submitter.attr('name') === 'search_teen' || submitter.attr('name') === 'search_adult' || submitter.attr('name') === 'clear_teen_search' || submitter.attr('name') === 'clear_adult_search')) {
+        if (submitter.length && (submitter.attr('name') === 'search_users' || submitter.attr('name') === 'clear_search')) {
             return true; // Allow search form to submit
         }
         
@@ -558,6 +681,13 @@ $(document).ready(function() {
     
     // Initialize on page load
     updateSelectionCounts();
+    
+    // Auto-update select all checkbox
+    $(document).on('change', 'input.user-checkbox', function() {
+        const totalCheckboxes = $('input.user-checkbox').length;
+        const checkedCheckboxes = $('input.user-checkbox:checked').length;
+        $('#select-all').prop('checked', totalCheckboxes > 0 && totalCheckboxes === checkedCheckboxes);
+    });
 });
 </script>
 </body>

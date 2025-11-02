@@ -15,9 +15,6 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// تابع بررسی اینکه آیا کاربر مدیر است
-
-
 // تابع تبدیل تاریخ شمسی به میلادی
 function shamsiToGregorian($shamsiDate) {
     if (empty($shamsiDate)) return null;
@@ -177,7 +174,7 @@ $RollcallUserData = [];
 
 if ($classId && $selectedYear && $selectedMonth && $selectedDay) {
     // دریافت اطلاعات دوره
-    $stmt = $conn->prepare("SELECT * FROM `Class` WHERE ClassID = ?");
+    $stmt = $conn->prepare("SELECT * FROM `class` WHERE ClassID = ?");
     $stmt->bind_param('i', $classId);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -185,19 +182,19 @@ if ($classId && $selectedYear && $selectedMonth && $selectedDay) {
     if ($result->num_rows > 0) {
         $classData = $result->fetch_assoc();
         
-        // دریافت لیست نوجوانان دوره
+        // دریافت لیست کاربران دوره - اصلاح شده
         $classUsers = json_decode($classData['CalssUsers'] ?? '[]', true);
         $UserIds = [];
         
         foreach ($classUsers as $user) {
-            if ($user['type'] === 'Users') {
+            if (isset($user['type']) && $user['type'] === 'teen') {
                 $UserIds[] = $user['id'];
             }
         }
         
         if (!empty($UserIds)) {
             $placeholders = str_repeat('?,', count($UserIds) - 1) . '?';
-            $stmt = $conn->prepare("SELECT * FROM `Users` WHERE UserID IN ($placeholders) ORDER BY UserFamily, UserName");
+            $stmt = $conn->prepare("SELECT * FROM `users` WHERE UserID IN ($placeholders) ORDER BY UserFamily, UserName");
             $stmt->bind_param(str_repeat('i', count($UserIds)), ...$UserIds);
             $stmt->execute();
             $Users = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -245,7 +242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_rollcalluser']
         $dayNames = ['Saturday' => 'شنبه', 'Sunday' => 'یکشنبه', 'Monday' => 'دوشنبه', 
                     'Tuesday' => 'سه شنبه', 'Wednesday' => 'چهارشنبه', 
                     'Thursday' => 'پنجشنبه', 'Friday' => 'جمعه'];
-        $dayName = $dayNames[date('l', strtotime($RollcallUserDate))];
+        $dayName = $dayNames[date('l', strtotime($rollcallUserDate))];
         
         $conn->begin_transaction();
         
@@ -255,7 +252,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_rollcalluser']
                 
                 // بررسی آیا رکورد قبلی وجود دارد
                 $checkStmt = $conn->prepare("SELECT RollcallUserID FROM `rollcalluser` WHERE ClassID = ? AND UserID = ? AND RollcallUserDate = ?");
-                $checkStmt->bind_param('iis', $classId, $UserId, $RollcallUserDate);
+                $checkStmt->bind_param('iis', $classId, $UserId, $rollcallUserDate);
                 $checkStmt->execute();
                 $exists = $checkStmt->get_result()->num_rows > 0;
                 $checkStmt->close();
@@ -263,11 +260,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_rollcalluser']
                 if ($exists) {
                     // به روزرسانی رکورد موجود
                     $stmt = $conn->prepare("UPDATE `rollcalluser` SET Status = ?, Notes = ? WHERE ClassID = ? AND UserID = ? AND RollcallUserDate = ?");
-                    $stmt->bind_param('ssiis', $status, $notes, $classId, $UserId, $RollcallUserDate);
+                    $stmt->bind_param('ssiis', $status, $notes, $classId, $UserId, $rollcallUserDate);
                 } else {
                     // درج رکورد جدید
                     $stmt = $conn->prepare("INSERT INTO `rollcalluser` (ClassID, UserID, RollcallUserDate, RollcallUserDay, Status, Notes) VALUES (?, ?, ?, ?, ?, ?)");
-                    $stmt->bind_param('iissss', $classId, $UserId, $RollcallUserDate, $dayName, $status, $notes);
+                    $stmt->bind_param('iissss', $classId, $UserId, $rollcallUserDate, $dayName, $status, $notes);
                 }
                 
                 $stmt->execute();
@@ -289,7 +286,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_rollcalluser']
 }
 
 // دریافت لیست دوره‌ها
-$classes = $conn->query("SELECT ClassID, ClassName FROM `Class` ORDER BY ClassName");
+$classes = $conn->query("SELECT ClassID, ClassName FROM `class` ORDER BY ClassName");
 
 // تولید لیست سال‌ها (از 1390 تا 1410)
 $years = [];
@@ -325,7 +322,7 @@ for ($i = 1; $i <= 31; $i++) {
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>حضور و غیاب نوجوانان</title>
+    <title>حضور و غیاب کاربران</title>
     <link href="../assets/css/bootstrap.rtl.min.css" rel="stylesheet" />
     <link href="../assets/css/bootstrap-icons.css" rel="stylesheet" />
     <link href="../assets/css/style.css" rel="stylesheet" />
@@ -373,7 +370,7 @@ for ($i = 1; $i <= 31; $i++) {
                     <span class="me-2">بستن</span>
                     <span aria-hidden="true" class="fs-5">×</span>
                 </a>
-                <h2 class="mb-0">حضور و غیاب نوجوانان</h2>
+                <h2 class="mb-0">حضور و غیاب کاربران</h2>
             </div>
         </div>
 
@@ -450,26 +447,19 @@ for ($i = 1; $i <= 31; $i++) {
                 </div>
                 
                 <div class="row mt-3">
-                    <div class="col-6">
+                    <div class="col-12">
                         <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-search me-2"></i>نمایش لیست نوجوانان
+                            <i class="bi bi-search me-2"></i>نمایش لیست کاربران
                         </button>
-                <!-- دکمه مشاهده گزارش نوجوانان - فقط برای مدیران -->
-                <?php if (isAdmin()): ?>
-                        <a href="reportUser.php?class_id=<?php echo $classId; ?>&year=<?php echo $selectedYear; ?>&month=<?php echo $selectedMonth; ?>" 
-                           class="btn btn-info col-6" 
-                           target="_blank">
-                            <i class="bi bi-bar-chart me-2"></i>مشاهده گزارش نوجوانان
-                        </a>
-                    <?php endif; ?>
-					</div>
+                    </div>
+                </div>
             </div>
         </form>
 
         <?php if ($classId && $selectedYear && $selectedMonth && $selectedDay && !empty($Users)): ?>
         <!-- فرم حضور و غیاب -->
-        <form method="post" id="rollcallUser-form">
-            <input type="hidden" name="submit_rollcallUser" value="1">
+        <form method="post" id="rollcalluser-form">
+            <input type="hidden" name="submit_rollcalluser" value="1">
             <input type="hidden" name="class_id" value="<?php echo $classId; ?>">
             <input type="hidden" name="year" value="<?php echo $selectedYear; ?>">
             <input type="hidden" name="month" value="<?php echo $selectedMonth; ?>">
@@ -478,7 +468,7 @@ for ($i = 1; $i <= 31; $i++) {
             <div class="card">
                 <div class="card-header bg-primary text-white">
                     <i class="bi bi-people-fill me-2"></i>
-                    لیست نوجوانان دوره: <strong><?php echo htmlspecialchars($classData['ClassName']); ?></strong>
+                    لیست کاربران دوره: <strong><?php echo htmlspecialchars($classData['ClassName']); ?></strong>
                     - تاریخ: <strong><?php echo $selectedYear . '/' . $selectedMonth . '/' . $selectedDay; ?></strong>
                 </div>
                 
@@ -498,7 +488,7 @@ for ($i = 1; $i <= 31; $i++) {
                             <tbody>
                                 <?php foreach ($Users as $index => $User): 
                                     $rollcallUser = $RollcallUserData[$User['UserID']] ?? [];
-                                    $currentStatus = $rollcallUser['Status'] ?? 'absent';
+                                    $currentStatus = $rollcallUser['Status'] ?? 'غایب';
                                 ?>
                                 <tr>
                                     <td class="text-center"><?php echo $index + 1; ?></td>
@@ -513,23 +503,23 @@ for ($i = 1; $i <= 31; $i++) {
                                     </td>
                                     <td class="text-center">
                                         <div class="btn-group btn-group-sm" role="group">
-                                            <input type="radio" class="btn-check" name="rollcallUser[<?php echo $User['UserID']; ?>]" 
-                                                   id="present_<?php echo $User['UserID']; ?>" value="present" 
-                                                   <?php echo $currentStatus === 'present' ? 'checked' : ''; ?>>
+                                            <input type="radio" class="btn-check" name="rollcalluser[<?php echo $User['UserID']; ?>]" 
+                                                   id="present_<?php echo $User['UserID']; ?>" value="حاضر" 
+                                                   <?php echo $currentStatus === 'حاضر' ? 'checked' : ''; ?>>
                                             <label class="btn btn-outline-success" for="present_<?php echo $User['UserID']; ?>">
                                                 <i class="bi bi-check-lg"></i> حاضر
                                             </label>
 
-                                            <input type="radio" class="btn-check" name="rollcallUser[<?php echo $User['UserID']; ?>]" 
-                                                   id="absent_<?php echo $User['UserID']; ?>" value="absent" 
-                                                   <?php echo $currentStatus === 'absent' ? 'checked' : ''; ?>>
+                                            <input type="radio" class="btn-check" name="rollcalluser[<?php echo $User['UserID']; ?>]" 
+                                                   id="absent_<?php echo $User['UserID']; ?>" value="غایب" 
+                                                   <?php echo $currentStatus === 'غایب' ? 'checked' : ''; ?>>
                                             <label class="btn btn-outline-danger" for="absent_<?php echo $User['UserID']; ?>">
                                                 <i class="bi bi-x-lg"></i> غایب
                                             </label>
 
-                                            <input type="radio" class="btn-check" name="rollcallUser[<?php echo $User['UserID']; ?>]" 
-                                                   id="excused_<?php echo $User['UserID']; ?>" value="excused" 
-                                                   <?php echo $currentStatus === 'excused' ? 'checked' : ''; ?>>
+                                            <input type="radio" class="btn-check" name="rollcalluser[<?php echo $User['UserID']; ?>]" 
+                                                   id="excused_<?php echo $User['UserID']; ?>" value="مرخصی" 
+                                                   <?php echo $currentStatus === 'مرخصی' ? 'checked' : ''; ?>>
                                             <label class="btn btn-outline-warning" for="excused_<?php echo $User['UserID']; ?>">
                                                 <i class="bi bi-clock"></i> مرخصی
                                             </label>
@@ -592,7 +582,7 @@ for ($i = 1; $i <= 31; $i++) {
         <?php elseif ($classId && $selectedYear && $selectedMonth && $selectedDay && empty($Users)): ?>
             <div class="alert alert-warning text-center">
                 <i class="bi bi-exclamation-triangle me-2"></i>
-                هیچ نوجوانی در این دوره ثبت نام نکرده است.
+                هیچ کاربری در این دوره ثبت نام نکرده است.
             </div>
         <?php endif; ?>
     </div>
@@ -607,9 +597,9 @@ for ($i = 1; $i <= 31; $i++) {
 $(document).ready(function() {
     // محاسبه آمار
     function updateStatistics() {
-        const presentCount = $('input[value="present"]:checked').length;
-        const absentCount = $('input[value="absent"]:checked').length;
-        const excusedCount = $('input[value="excused"]:checked').length;
+        const presentCount = $('input[value="حاضر"]:checked').length;
+        const absentCount = $('input[value="غایب"]:checked').length;
+        const excusedCount = $('input[value="مرخصی"]:checked').length;
         
         $('#present-count').text(presentCount);
         $('#absent-count').text(absentCount);
