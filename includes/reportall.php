@@ -578,34 +578,45 @@ if (isset($_POST['export_excel']) && !empty($report_data)) {
     header('Content-Disposition: attachment; filename="report_' . date('Y-m-d_H-i-s') . '.xls"');
     
     echo '<html dir="rtl">';
-    echo '<head><meta charset="UTF-8"></head>';
+    echo '<head>';
+    echo '<meta charset="UTF-8">';
+    echo '<style>';
+    echo 'body { font-family: "B Nazanin", Tahoma, sans-serif; direction: rtl; margin: 0; padding: 20px; }';
+    echo 'table { border-collapse: collapse; width: 100%; font-family: "B Nazanin", Tahoma, sans-serif; margin-bottom: 20px; }';
+    echo 'th, td { border: 1px solid #ddd; padding: 8px; text-align: center; font-family: "B Nazanin", Tahoma, sans-serif; }';
+    echo 'th { background-color: #4a6cf7; color: white; font-weight: bold; }';
+    echo '.header-desc { background-color: #f8f9fa; padding: 15px; text-align: center; margin: 15px 0; border: 2px solid #dee2e6; border-radius: 8px; font-family: "B Nazanin", Tahoma, sans-serif; }';
+    echo '.footer-desc { background-color: #f8f9fa; padding: 15px; text-align: center; margin: 15px 0; border: 2px solid #dee2e6; border-radius: 8px; font-family: "B Nazanin", Tahoma, sans-serif; }';
+    echo '.report-title { text-align: center; font-size: 18px; font-weight: bold; margin: 20px 0; color: #2c3e50; font-family: "B Nazanin", Tahoma, sans-serif; }';
+    echo '.report-info { text-align: center; font-size: 12px; color: #7f8c8d; margin: 10px 0; font-family: "B Nazanin", Tahoma, sans-serif; }';
+    echo '</style>';
+    echo '</head>';
     echo '<body>';
-    echo '<table border="1" style="width:100%; border-collapse: collapse;">';
     
-    // هدر گزارش
-    $colspan = count($selected_fields);
-    if ($report_type === 'attendance' || $report_type === 'class') {
-        $colspan += 4;
-    }
-    echo '<tr><th colspan="' . $colspan . '" style="background-color: #4a6cf7; color: white; font-size: 16px; padding: 15px;">' . $report_title . '</th></tr>';
+    // عنوان گزارش
+    echo '<div class="report-title">' . $report_title . '</div>';
     
     // توضیحات هدر
     if (!empty($header_desc)) {
-        echo '<tr><td colspan="' . $colspan . '" style="background-color: #f8f9fa; padding: 10px; text-align: right;"><strong>توضیحات:</strong><br>' . nl2br(htmlspecialchars($header_desc)) . '</td></tr>';
+        echo '<div class="header-desc">';
+        echo '<strong>توضیحات:</strong><br>' . nl2br(htmlspecialchars($header_desc));
+        echo '</div>';
     }
     
+    echo '<table border="1">';
+    
     // هدر جدول
-    echo '<tr style="background-color: #e9ecef;">';
-    echo '<th style="border: 1px solid #ddd; padding: 8px;">ردیف</th>';
+    echo '<tr style="background-color: #34495e; color: white;">';
+    echo '<th style="border: 1px solid #ddd; padding: 10px;">ردیف</th>';
     foreach ($selected_fields as $field) {
         $field_name = $users_fields[$field] ?? $field;
-        echo '<th style="border: 1px solid #ddd; padding: 8px;">' . $field_name . '</th>';
+        echo '<th style="border: 1px solid #ddd; padding: 10px;">' . $field_name . '</th>';
     }
     if ($report_type === 'attendance' || $report_type === 'class') {
-        echo '<th style="border: 1px solid #ddd; padding: 8px;">حضور</th>';
-        echo '<th style="border: 1px solid #ddd; padding: 8px;">غیبت</th>';
-        echo '<th style="border: 1px solid #ddd; padding: 8px;">مرخصی</th>';
-        echo '<th style="border: 1px solid #ddd; padding: 8px;">جمع</th>';
+        echo '<th style="border: 1px solid #ddd; padding: 10px;">حضور</th>';
+        echo '<th style="border: 1px solid #ddd; padding: 10px;">غیبت</th>';
+        echo '<th style="border: 1px solid #ddd; padding: 10px;">مرخصی</th>';
+        echo '<th style="border: 1px solid #ddd; padding: 10px;">جمع</th>';
     }
     echo '</tr>';
     
@@ -627,16 +638,20 @@ if (isset($_POST['export_excel']) && !empty($report_data)) {
         echo '</tr>';
     }
     
+    echo '</table>';
+    
     // توضیحات فوتر
     if (!empty($footer_desc)) {
-        echo '<tr><td colspan="' . $colspan . '" style="background-color: #f8f9fa; padding: 10px; text-align: right;"><strong>توضیحات پایانی:</strong><br>' . nl2br(htmlspecialchars($footer_desc)) . '</td></tr>';
+        echo '<div class="footer-desc">';
+        echo '<strong>توضیحات پایانی:</strong><br>' . nl2br(htmlspecialchars($footer_desc));
+        echo '</div>';
     }
     
-    // اطلاعات پایین جدول
-    echo '<tr><td colspan="' . $colspan . '" style="background-color: #e9ecef; padding: 8px; text-align: center; font-size: 12px;">';
+    // اطلاعات پایین
+    echo '<div class="report-info">';
     echo 'تعداد رکوردها: ' . count($report_data) . ' | تاریخ تولید: ' . gregorianToShamsi(date('Y-m-d')) . ' | زمان تولید: ' . date('H:i:s');
-    echo '</td></tr>';
-    echo '</table>';
+    echo '</div>';
+    
     echo '</body></html>';
     exit;
 }
@@ -651,19 +666,21 @@ if (isset($_POST['print_report']) && !empty($report_data)) {
     echo '<meta charset="UTF-8">';
     echo '<title>چاپ ' . $report_title . '</title>';
     echo '<style>';
-    echo 'body { font-family: "B Nazanin", Tahoma, sans-serif; direction: rtl; margin: 20px; }';
+    echo 'body { font-family: "B Nazanin", Tahoma, sans-serif; direction: rtl; margin: 20px; background: white; }';
     echo '.print-header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #333; }';
-    echo '.print-header h1 { color: #2c3e50; margin: 0; }';
-    echo '.print-table { width: 100%; border-collapse: collapse; margin-top: 20px; }';
-    echo '.print-table th { background-color: #34495e; color: white; padding: 10px; border: 1px solid #ddd; }';
-    echo '.print-table td { padding: 8px; border: 1px solid #ddd; text-align: center; }';
+    echo '.print-header h1 { color: #2c3e50; margin: 0; font-family: "B Nazanin", Tahoma, sans-serif; font-size: 22px; }';
+    echo '.print-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-family: "B Nazanin", Tahoma, sans-serif; }';
+    echo '.print-table th { background-color: #34495e; color: white; padding: 10px; border: 1px solid #ddd; font-family: "B Nazanin", Tahoma, sans-serif; font-weight: bold; }';
+    echo '.print-table td { padding: 8px; border: 1px solid #ddd; text-align: center; font-family: "B Nazanin", Tahoma, sans-serif; }';
     echo '.print-table tr:nth-child(even) { background-color: #f2f2f2; }';
-    echo '.header-desc { background-color: #ecf0f1; padding: 15px; margin-bottom: 20px; border-radius: 5px; }';
-    echo '.footer-desc { background-color: #ecf0f1; padding: 15px; margin-top: 20px; border-radius: 5px; }';
-    echo '.print-info { text-align: center; margin-top: 20px; font-size: 12px; color: #7f8c8d; }';
+    echo '.header-desc { background-color: #ecf0f1; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center; border: 2px solid #bdc3c7; font-family: "B Nazanin", Tahoma, sans-serif; }';
+    echo '.footer-desc { background-color: #ecf0f1; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center; border: 2px solid #bdc3c7; font-family: "B Nazanin", Tahoma, sans-serif; }';
+    echo '.print-info { text-align: center; margin-top: 20px; font-size: 12px; color: #7f8c8d; font-family: "B Nazanin", Tahoma, sans-serif; }';
     echo '@media print {';
     echo '  .no-print { display: none; }';
-    echo '  body { margin: 0; }';
+    echo '  body { margin: 10px; }';
+    echo '  .print-table { font-size: 10px; }';
+    echo '  .print-table th, .print-table td { padding: 6px; }';
     echo '}';
     echo '</style>';
     echo '</head>';
@@ -727,8 +744,8 @@ if (isset($_POST['print_report']) && !empty($report_data)) {
     echo '</div>';
     
     echo '<div class="no-print" style="text-align: center; margin-top: 20px;">';
-    echo '<button onclick="window.print()" style="padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">چاپ گزارش</button>';
-    echo '<a href="reportall.php" style="display:inline-block;padding:10px 20px;background:#e74c3c;color:white;border-radius:5px;text-decoration:none;">بستن</a>';
+    echo '<button onclick="window.print()" style="padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-family: \'B Nazanin\', Tahoma, sans-serif;">چاپ گزارش</button>';
+    echo '<a href="reportall.php" style="display:inline-block;padding:10px 20px;background:#e74c3c;color:white;border-radius:5px;text-decoration:none;margin-right:10px;font-family: \'B Nazanin\', Tahoma, sans-serif;">بستن</a>';
     echo '</div>';
     
     echo '</body>';
@@ -741,8 +758,8 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
     // پاک کردن output buffer
     ob_end_clean();
     
-    // ایجاد شیء PDF
-    $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+    // ایجاد شیء PDF با پشتیبانی از RTL
+    $pdf = new TCPDF('L', 'mm', 'A4', true, 'UTF-8', false);
     
     // تنظیمات سند
     $pdf->SetCreator('System');
@@ -757,51 +774,88 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
     // افزودن صفحه
     $pdf->AddPage();
     
-    // تنظیم فونت
+    // تنظیم فونت برای پشتیبانی از فارسی
     $pdf->SetFont('dejavusans', '', 10);
     
     // عنوان گزارش
-    $pdf->SetFont('dejavusans', 'B', 16);
-    $pdf->Cell(0, 10, $report_title, 0, 1, 'C');
-    $pdf->Ln(5);
+    //$pdf->SetFont('dejavusans', 'B', 16);
+    //$pdf->Cell(0, 15, $report_title, 0, 1, 'C');
+    //$pdf->Ln(5);
     
-    // توضیحات هدر
+    // توضیحات هدر - در وسط و داخل کادر با رنگ پس‌زمینه
     if (!empty($header_desc)) {
+        // محاسبه ارتفاع مورد نیاز برای متن
+        $header_height = $pdf->getStringHeight(240, $header_desc) + 20; // فاصله بیشتر
+        
+        // تنظیم رنگ پس‌زمینه ملایم (آبی بسیار روشن)
+        $pdf->SetFillColor(230, 240, 255);
+        $pdf->SetDrawColor(100, 150, 200); // رنگ کادر آبی ملایم
+        
+        // رسم کادر با پس‌زمینه
+        $header_y = $pdf->GetY();
+
+        
+        // نوشتن عنوان توضیحات با فونت بزرگتر و بولد
+        $pdf->SetFont('dejavusans', 'B', 14);
+        $pdf->SetXY(15, $header_y + 8);
+        $pdf->Cell(250, 10, '', 0, 1, 'C');
+        
+        // نوشتن متن توضیحات با فونت بزرگتر
         $pdf->SetFont('dejavusans', 'B', 12);
-        $pdf->Cell(0, 10, 'توضیحات:', 0, 1, 'R');
-        $pdf->SetFont('dejavusans', '', 10);
-        $pdf->MultiCell(0, 10, $header_desc, 0, 'R');
-        $pdf->Ln(5);
+        $pdf->SetXY(20, $header_y + 20);
+        $pdf->MultiCell(240, 8, $header_desc, 0, 'C');
+        
+        $pdf->SetY($header_y + $header_height + 10);
     }
     
     // محاسبه عرض ستون‌ها
-    $col_count = count($selected_fields) + 1;
+    $col_count = count($selected_fields) + 1; // +1 برای ستون ردیف
     if ($report_type === 'attendance' || $report_type === 'class') {
         $col_count += 4;
     }
-    $col_width = 190 / $col_count;
     
-    // هدر جدول
+    // تنظیم عرض صفحه و محاسبه عرض ستون‌ها
+    $page_width = 280;
+    $col_width = $page_width / $col_count;
+    
+    // تنظیم سایز فونت بر اساس عرض ستون
+    if ($col_width < 15) {
+        $font_size = 6;
+    } elseif ($col_width < 20) {
+        $font_size = 7;
+    } else {
+        $font_size = 8;
+    }
+    
+    // هدر جدول - با جهت RTL (ستون ردیف در سمت راست)
     $pdf->SetFillColor(52, 73, 94);
     $pdf->SetTextColor(255);
-    $pdf->SetFont('dejavusans', 'B', 10);
+    $pdf->SetFont('dejavusans', 'B', $font_size);
     
-    $pdf->Cell($col_width, 10, 'ردیف', 1, 0, 'C', true);
-    foreach ($selected_fields as $field) {
-        $field_name = $users_fields[$field] ?? $field;
-        $pdf->Cell($col_width, 10, $field_name, 1, 0, 'C', true);
-    }
+    // ابتدا ستون‌های حضور و غیاب اگر وجود دارند (سمت چپ)
     if ($report_type === 'attendance' || $report_type === 'class') {
-        $pdf->Cell($col_width, 10, 'حضور', 1, 0, 'C', true);
-        $pdf->Cell($col_width, 10, 'غیبت', 1, 0, 'C', true);
-        $pdf->Cell($col_width, 10, 'مرخصی', 1, 0, 'C', true);
-        $pdf->Cell($col_width, 10, 'جمع', 1, 0, 'C', true);
+        $pdf->Cell($col_width, 8, 'جمع', 1, 0, 'C', true);
+        $pdf->Cell($col_width, 8, 'مرخصی', 1, 0, 'C', true);
+        $pdf->Cell($col_width, 8, 'غیبت', 1, 0, 'C', true);
+        $pdf->Cell($col_width, 8, 'حضور', 1, 0, 'C', true);
     }
-    $pdf->Ln();
     
-    // داده‌ها
+    // سپس فیلدهای انتخابی به ترتیب معکوس برای RTL
+    $reversed_fields = array_reverse($selected_fields);
+    foreach ($reversed_fields as $field) {
+        $field_name = $users_fields[$field] ?? $field;
+        if (mb_strlen($field_name) > 15) {
+            $field_name = mb_substr($field_name, 0, 12) . '...';
+        }
+        $pdf->Cell($col_width, 8, $field_name, 1, 0, 'C', true);
+    }
+    
+    // در انتها ستون ردیف (سمت راست)
+    $pdf->Cell($col_width, 8, 'ردیف', 1, 1, 'C', true);
+    
+    // داده‌ها - با جهت RTL
     $pdf->SetTextColor(0);
-    $pdf->SetFont('dejavusans', '', 9);
+    $pdf->SetFont('dejavusans', '', $font_size);
     $counter = 1;
     $fill = false;
     
@@ -814,34 +868,58 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
         }
         $fill = !$fill;
         
-        $pdf->Cell($col_width, 8, $counter++, 1, 0, 'C', true);
-        foreach ($selected_fields as $field) {
-            $value = $row[$field] ?? '';
-            $pdf->Cell($col_width, 8, $value, 1, 0, 'C', true);
-        }
+        // ابتدا ستون‌های حضور و غیاب اگر وجود دارند (سمت چپ)
         if ($report_type === 'attendance' || $report_type === 'class') {
-            $pdf->Cell($col_width, 8, $row['present_count'] ?? 0, 1, 0, 'C', true);
-            $pdf->Cell($col_width, 8, $row['absent_count'] ?? 0, 1, 0, 'C', true);
-            $pdf->Cell($col_width, 8, $row['excused_count'] ?? 0, 1, 0, 'C', true);
-            $pdf->Cell($col_width, 8, (($row['present_count'] ?? 0) + ($row['absent_count'] ?? 0) + ($row['excused_count'] ?? 0)), 1, 0, 'C', true);
+            $total = ($row['present_count'] ?? 0) + ($row['absent_count'] ?? 0) + ($row['excused_count'] ?? 0);
+            $pdf->Cell($col_width, 6, $total, 1, 0, 'C', true);
+            $pdf->Cell($col_width, 6, $row['excused_count'] ?? 0, 1, 0, 'C', true);
+            $pdf->Cell($col_width, 6, $row['absent_count'] ?? 0, 1, 0, 'C', true);
+            $pdf->Cell($col_width, 6, $row['present_count'] ?? 0, 1, 0, 'C', true);
         }
-        $pdf->Ln();
+        
+        // سپس فیلدهای انتخابی به ترتیب معکوس برای RTL
+        foreach ($reversed_fields as $field) {
+            $value = $row[$field] ?? '';
+            if (mb_strlen($value) > 20) {
+                $value = mb_substr($value, 0, 17) . '...';
+            }
+            $pdf->Cell($col_width, 6, $value, 1, 0, 'C', true);
+        }
+        
+        // در انتها ستون ردیف (سمت راست)
+        $pdf->Cell($col_width, 6, $counter++, 1, 1, 'C', true);
     }
     
     $pdf->Ln(10);
     
-    // توضیحات فوتر
+    // توضیحات فوتر - در وسط و داخل کادر با رنگ پس‌زمینه
     if (!empty($footer_desc)) {
+        // محاسبه ارتفاع مورد نیاز برای متن
+        $footer_height = $pdf->getStringHeight(240, $footer_desc) + 20; // فاصله بیشتر
+        
+        // تنظیم رنگ پس‌زمینه ملایم (سبز بسیار روشن)
+        $pdf->SetFillColor(230, 255, 240);
+        $pdf->SetDrawColor(100, 200, 150); // رنگ کادر سبز ملایم
+        
+        // رسم کادر با پس‌زمینه
+        $footer_y = $pdf->GetY();
+
+        
+        // نوشتن عنوان توضیحات با فونت بزرگتر و بولد
+        $pdf->SetFont('dejavusans', 'B', 14);
+        $pdf->SetXY(15, $footer_y + 8);
+        $pdf->Cell(250, 10, '', 0, 1, 'C');
+        
+        // نوشتن متن توضیحات با فونت بزرگتر
         $pdf->SetFont('dejavusans', 'B', 12);
-        $pdf->Cell(0, 10, 'توضیحات پایانی:', 0, 1, 'R');
-        $pdf->SetFont('dejavusans', '', 10);
-        $pdf->MultiCell(0, 10, $footer_desc, 0, 'R');
-        $pdf->Ln(5);
+        $pdf->SetXY(20, $footer_y + 20);
+        $pdf->MultiCell(240, 8, $footer_desc, 0, 'C');
+        
+        $pdf->SetY($footer_y + $footer_height + 10);
     }
     
     // اطلاعات پایین
     $pdf->SetFont('dejavusans', '', 8);
-    $pdf->Cell(0, 10, 'تعداد رکوردها: ' . count($report_data) . ' | تاریخ تولید: ' . gregorianToShamsi(date('Y-m-d')) . ' | زمان تولید: ' . date('H:i:s'), 0, 1, 'C');
     
     // خروجی PDF
     $pdf->Output('report_' . date('Y-m-d_H-i-s') . '.pdf', 'D');
@@ -1328,7 +1406,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                     <h4 class="text-center mb-4"><?php echo $report_title; ?></h4>
                     
                     <?php if (!empty($header_desc)): ?>
-                    <div class="alert alert-info">
+                    <div class="alert alert-info text-center">
                         <h5><i class="fas fa-heading"></i> توضیحات:</h5>
                         <p class="mb-0"><?php echo nl2br(htmlspecialchars($header_desc)); ?></p>
                     </div>
@@ -1380,7 +1458,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                     </div>
                     
                     <?php if (!empty($footer_desc)): ?>
-                    <div class="alert alert-secondary mt-3">
+                    <div class="alert alert-secondary text-center mt-3">
                         <h5><i class="fas fa-file-alt"></i> توضیحات پایانی:</h5>
                         <p class="mb-0"><?php echo nl2br(htmlspecialchars($footer_desc)); ?></p>
                     </div>

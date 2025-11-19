@@ -183,6 +183,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['UserID'])) {
         $errors['UserShebaNumber'] = 'شماره شبا باید با IR شروع شده و 26 رقم باشد';
     }
     
+    // بررسی تکراری نبودن کدسیستمی و کدملی - اضافه شده
+    if (empty($errors)) {
+        // بررسی کدسیستمی تکراری
+        $stmt = $conn->prepare("SELECT UserID FROM users WHERE UserSysCode = ? AND UserID != ?");
+        $stmt->bind_param("si", $UserSysCode, $UserID);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result->num_rows > 0) {
+            $errors['UserSysCode'] = 'این کدسیستمی قبلاً توسط کاربر دیگری ثبت شده است';
+        }
+        $stmt->close();
+        
+        // بررسی کدملی تکراری
+        $stmt = $conn->prepare("SELECT UserID FROM users WHERE UserMelli = ? AND UserID != ?");
+        $stmt->bind_param("si", $UserMelli, $UserID);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result->num_rows > 0) {
+            $errors['UserMelli'] = 'این کدملی قبلاً توسط کاربر دیگری ثبت شده است';
+        }
+        $stmt->close();
+    }
+    
     // اگر خطایی وجود نداشت، اطلاعات را به‌روزرسانی کن
     if (empty($errors)) {
         // ساخت کوئری UPDATE
