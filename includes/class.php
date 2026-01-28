@@ -26,10 +26,39 @@ $success = '';
 
 // Handle search functionality
 $searchQuery = $_POST['search_query'] ?? '';
+$searchResults = [];
 
 // Clear search if needed
 if (isset($_POST['clear_search'])) {
     $searchQuery = '';
+    $searchResults = [];
+}
+
+// Handle clear form
+if (isset($_POST['clear_form'])) {
+    unset($_SESSION['form_data']);
+    $searchQuery = '';
+    $searchResults = [];
+    // ریدایرکت به صفحه خالی
+    header('Location: class.php');
+    exit();
+}
+
+// Store form data in session to preserve it during search
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['search_users']) || isset($_POST['clear_search'])) {
+        // فقط برای جستجو، داده‌های فرم را در سشن ذخیره کنیم
+        $_SESSION['form_data'] = [
+            'ClassName' => $_POST['ClassName'] ?? '',
+            'ClassTime' => $_POST['ClassTime'] ?? '',
+            'ClassTeacher' => $_POST['ClassTeacher'] ?? '',
+            'ClassDateStart' => $_POST['ClassDateStart'] ?? '',
+            'ClassDateEnd' => $_POST['ClassDateEnd'] ?? '',
+            'ClassPlace' => $_POST['ClassPlace'] ?? '',
+            'ClassDescription' => $_POST['ClassDescription'] ?? '',
+            'CalssUsers' => $_POST['CalssUsers'] ?? '[]'
+        ];
+    }
 }
 
 // Handle add new class
@@ -63,7 +92,7 @@ if ($editMode) {
 }
 
 // Handle form submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['search_users']) && !isset($_POST['clear_search'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['search_users']) && !isset($_POST['clear_search']) && !isset($_POST['clear_form'])) {
     
     // Check if it's edit mode from hidden field
     if (isset($_POST['edit_id']) && is_numeric($_POST['edit_id']) && $_POST['edit_id'] > 0) {
@@ -94,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['search_users']) && !
         }
     }
 
-    // اعتبارسنجی فرمت تاریخ میلادی
+    // اعتبارسنجی فرمت تاریخ میلادی (yyyy-mm-dd)
     if ($ClassDateStart && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $ClassDateStart)) {
         $errors[] = 'فرمت تاریخ شروع نامعتبر است. باید به صورت YYYY-MM-DD باشد.';
     }
@@ -112,6 +141,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['search_users']) && !
                 $stmt->bind_param('ssssssssi', $ClassName, $ClassDateStart, $ClassDateEnd, $ClassTime, $ClassTeacher, $ClassPlace, $ClassDescription, $CalssUsers, $editId);
                 if ($stmt->execute()) {
                     $_SESSION['success_message'] = 'دوره با موفقیت به‌روزرسانی شد.';
+                    // پاک کردن داده‌های فرم از سشن
+                    unset($_SESSION['form_data']);
                     header('Location: class.php?success=1');
                     exit();
                 } else {
@@ -128,6 +159,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['search_users']) && !
                 $stmt->bind_param('ssssssss', $ClassName, $ClassDateStart, $ClassDateEnd, $ClassTime, $ClassTeacher, $ClassPlace, $ClassDescription, $CalssUsers);
                 if ($stmt->execute()) {
                     $_SESSION['success_message'] = 'دوره جدید با موفقیت ثبت شد.';
+                    // پاک کردن داده‌های فرم از سشن
+                    unset($_SESSION['form_data']);
                     header('Location: class.php?success=1');
                     exit();
                 } else {
@@ -147,27 +180,24 @@ if (isset($_GET['success']) && isset($_SESSION['success_message'])) {
     unset($_SESSION['success_message']);
 }
 
-// Build users query with search
-$usersWhere = "1=1";
-if (!empty($searchQuery)) {
-    $usersWhere .= " AND (UserSysCode LIKE '%" . $conn->real_escape_string($searchQuery) . "%' 
-                        OR UserMelli LIKE '%" . $conn->real_escape_string($searchQuery) . "%'
-                        OR UserName LIKE '%" . $conn->real_escape_string($searchQuery) . "%'
-                        OR UserFamily LIKE '%" . $conn->real_escape_string($searchQuery) . "%')";
-}
-
-$usersQuery = "SELECT UserID, UserSysCode, UserMelli, UserName, UserFamily
-               FROM users 
-               WHERE {$usersWhere} 
-               ORDER BY CAST(UserSysCode AS UNSIGNED)";
-$users = $conn->query($usersQuery);
-
-// Get all classes
-$classes = $conn->query("SELECT * FROM `class` ORDER BY ClassID DESC");
-
-// Parse selected users for edit mode
+// بارگذاری کاربران انتخاب شده
 $selectedUsers = [];
-if (!empty($classData['CalssUsers']) && $classData['CalssUsers'] !== '[]') {
+if ($editMode) {
+    // در حالت ویرایش، از دیتابیس بخوانیم
+    if (!empty($classData['CalssUsers']) && $classData['CalssUsers'] !== '[]') {
+        $decoded = json_decode($classData['CalssUsers'], true);
+        if (is_array($decoded)) {
+            $selectedUsers = $decoded;
+        }
+    }
+} elseif (isset($_SESSION['form_data']['CalssUsers'])) {
+    // در حالت ایجاد جدید، از سشن بخوانیم
+    $decoded = json_decode($_SESSION['form_data']['CalssUsers'], true);
+    if (is_array($decoded)) {
+        $selectedUsers = $decoded;
+    }
+} elseif (!empty($classData['CalssUsers']) && $classData['CalssUsers'] !== '[]') {
+    // حالت عادی
     $decoded = json_decode($classData['CalssUsers'], true);
     if (is_array($decoded)) {
         $selectedUsers = $decoded;
@@ -178,9 +208,37 @@ if (!empty($classData['CalssUsers']) && $classData['CalssUsers'] !== '[]') {
 $selectedUserIds = [];
 foreach ($selectedUsers as $user) {
     if (isset($user['id'])) {
-        $selectedUserIds[$user['id']] = true;
+        $selectedUserIds[$user['id']] = $user;
     }
 }
+
+// Handle user search
+$searchedUsers = [];
+if (isset($_POST['search_users']) && !empty($searchQuery)) {
+    $searchWhere = "1=1";
+    if (!empty($searchQuery)) {
+        $searchWhere .= " AND (UserSysCode LIKE '%" . $conn->real_escape_string($searchQuery) . "%' 
+                        OR UserMelli LIKE '%" . $conn->real_escape_string($searchQuery) . "%'
+                        OR UserName LIKE '%" . $conn->real_escape_string($searchQuery) . "%'
+                        OR UserFamily LIKE '%" . $conn->real_escape_string($searchQuery) . "%'
+                        OR UserMobile1 LIKE '%" . $conn->real_escape_string($searchQuery) . "%'
+                        OR UserMobile2 LIKE '%" . $conn->real_escape_string($searchQuery) . "%')";
+    }
+    
+    $searchQuerySQL = "SELECT UserID, UserSysCode, UserMelli, UserName, UserFamily, UserMobile1, UserMobile2
+               FROM users 
+               WHERE {$searchWhere} 
+               ORDER BY CAST(UserSysCode AS UNSIGNED)";
+    $searchResult = $conn->query($searchQuerySQL);
+    if ($searchResult && $searchResult->num_rows > 0) {
+        while($user = $searchResult->fetch_assoc()) {
+            $searchedUsers[] = $user;
+        }
+    }
+}
+
+// Get all classes
+$classes = $conn->query("SELECT * FROM `class` ORDER BY ClassID DESC");
 ?>
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -245,9 +303,35 @@ foreach ($selectedUsers as $user) {
             border: 1px solid #b6d4fe;
             border-radius: 8px;
         }
+        .selected-users-container {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .selected-user-item {
+            background: white;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .remove-user-btn {
+            color: #dc3545;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
         .class-management-page .content-box {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
+        }
+        .date-input {
+            direction: ltr;
+            text-align: left;
         }
         @media (max-width: 768px) {
             .user-list {
@@ -306,43 +390,101 @@ foreach ($selectedUsers as $user) {
                 <div class="col-md-6">
                     <label class="form-label">نام دوره <span class="text-danger">*</span></label>
                     <input type="text" name="ClassName" class="form-control" 
-                           value="<?php echo htmlspecialchars($classData['ClassName'] ?? ''); ?>" 
+                           value="<?php 
+                                if ($editMode) {
+                                    echo htmlspecialchars($classData['ClassName'] ?? '');
+                                } elseif (isset($_SESSION['form_data']['ClassName'])) {
+                                    echo htmlspecialchars($_SESSION['form_data']['ClassName']);
+                                } else {
+                                    echo htmlspecialchars($classData['ClassName'] ?? '');
+                                }
+                           ?>" 
                            placeholder="نام دوره را وارد کنید" required>
                 </div>
                 
                 <div class="col-md-3">
                     <label class="form-label">ساعت دوره</label>
                     <input type="text" name="ClassTime" class="form-control" placeholder="مثال: 16:00-18:00" 
-                           value="<?php echo htmlspecialchars($classData['ClassTime'] ?? ''); ?>">
+                           value="<?php 
+                                if ($editMode) {
+                                    echo htmlspecialchars($classData['ClassTime'] ?? '');
+                                } elseif (isset($_SESSION['form_data']['ClassTime'])) {
+                                    echo htmlspecialchars($_SESSION['form_data']['ClassTime']);
+                                } else {
+                                    echo htmlspecialchars($classData['ClassTime'] ?? '');
+                                }
+                           ?>">
                 </div>
                 
                 <div class="col-md-3">
                     <label class="form-label">مربی دوره</label>
                     <input type="text" name="ClassTeacher" class="form-control" 
-                           value="<?php echo htmlspecialchars($classData['ClassTeacher'] ?? ''); ?>">
+                           value="<?php 
+                                if ($editMode) {
+                                    echo htmlspecialchars($classData['ClassTeacher'] ?? '');
+                                } elseif (isset($_SESSION['form_data']['ClassTeacher'])) {
+                                    echo htmlspecialchars($_SESSION['form_data']['ClassTeacher']);
+                                } else {
+                                    echo htmlspecialchars($classData['ClassTeacher'] ?? '');
+                                }
+                           ?>">
                 </div>
                 
                 <div class="col-md-4">
-                    <label class="form-label">تاریخ شروع</label>
-                    <input type="date" name="ClassDateStart" class="form-control" 
-                           value="<?php echo !empty($classData['ClassDateStart']) && $classData['ClassDateStart'] != '0000-00-00' ? $classData['ClassDateStart'] : ''; ?>">
+                    <label class="form-label">تاریخ شروع <small class="text-muted">(YYYY-MM-DD)</small></label>
+                    <input type="text" name="ClassDateStart" class="form-control date-input" 
+                           value="<?php 
+                                if ($editMode) {
+                                    echo !empty($classData['ClassDateStart']) && $classData['ClassDateStart'] != '0000-00-00' ? $classData['ClassDateStart'] : '';
+                                } elseif (isset($_SESSION['form_data']['ClassDateStart'])) {
+                                    echo htmlspecialchars($_SESSION['form_data']['ClassDateStart']);
+                                } else {
+                                    echo !empty($classData['ClassDateStart']) && $classData['ClassDateStart'] != '0000-00-00' ? $classData['ClassDateStart'] : '';
+                                }
+                           ?>"
+                           placeholder="YYYY-MM-DD">
                 </div>
                 
                 <div class="col-md-4">
-                    <label class="form-label">تاریخ پایان</label>
-                    <input type="date" name="ClassDateEnd" class="form-control" 
-                           value="<?php echo !empty($classData['ClassDateEnd']) && $classData['ClassDateEnd'] != '0000-00-00' ? $classData['ClassDateEnd'] : ''; ?>">
+                    <label class="form-label">تاریخ پایان <small class="text-muted">(YYYY-MM-DD)</small></label>
+                    <input type="text" name="ClassDateEnd" class="form-control date-input" 
+                           value="<?php 
+                                if ($editMode) {
+                                    echo !empty($classData['ClassDateEnd']) && $classData['ClassDateEnd'] != '0000-00-00' ? $classData['ClassDateEnd'] : '';
+                                } elseif (isset($_SESSION['form_data']['ClassDateEnd'])) {
+                                    echo htmlspecialchars($_SESSION['form_data']['ClassDateEnd']);
+                                } else {
+                                    echo !empty($classData['ClassDateEnd']) && $classData['ClassDateEnd'] != '0000-00-00' ? $classData['ClassDateEnd'] : '';
+                                }
+                           ?>"
+                           placeholder="YYYY-MM-DD">
                 </div>
                 
                 <div class="col-md-4">
                     <label class="form-label">مکان دوره</label>
                     <input type="text" name="ClassPlace" class="form-control" 
-                           value="<?php echo htmlspecialchars($classData['ClassPlace'] ?? ''); ?>">
+                           value="<?php 
+                                if ($editMode) {
+                                    echo htmlspecialchars($classData['ClassPlace'] ?? '');
+                                } elseif (isset($_SESSION['form_data']['ClassPlace'])) {
+                                    echo htmlspecialchars($_SESSION['form_data']['ClassPlace']);
+                                } else {
+                                    echo htmlspecialchars($classData['ClassPlace'] ?? '');
+                                }
+                           ?>">
                 </div>
                 
                 <div class="col-12">
                     <label class="form-label">توضیحات دوره</label>
-                    <textarea name="ClassDescription" class="form-control" rows="2" placeholder="توضیحات مربوط به دوره..."><?php echo htmlspecialchars($classData['ClassDescription'] ?? ''); ?></textarea>
+                    <textarea name="ClassDescription" class="form-control" rows="2" placeholder="توضیحات مربوط به دوره..."><?php 
+                        if ($editMode) {
+                            echo htmlspecialchars($classData['ClassDescription'] ?? '');
+                        } elseif (isset($_SESSION['form_data']['ClassDescription'])) {
+                            echo htmlspecialchars($_SESSION['form_data']['ClassDescription']);
+                        } else {
+                            echo htmlspecialchars($classData['ClassDescription'] ?? '');
+                        }
+                    ?></textarea>
                 </div>
             </div>
 
@@ -360,25 +502,44 @@ foreach ($selectedUsers as $user) {
                         </div>
                     </div>
 
+                    <!-- نمایش کاربران انتخاب شده -->
+                    <?php if (!empty($selectedUsers)): ?>
+                        <div class="selected-users-container mb-4">
+                            <h6 class="mb-3">
+                                <i class="bi bi-person-check me-2"></i>کاربران انتخاب شده
+                            </h6>
+                            <div id="selected-users-list">
+                                <?php foreach ($selectedUsers as $user): ?>
+                                    <?php if (isset($user['id']) && isset($user['name'])): ?>
+                                        <div class="selected-user-item" data-user-id="<?php echo $user['id']; ?>">
+                                            <span><?php echo htmlspecialchars($user['name']); ?> (کد: <?php echo htmlspecialchars($user['code'] ?? ''); ?>)</span>
+                                            <i class="bi bi-x-circle remove-user-btn" onclick="removeSelectedUser('<?php echo $user['id']; ?>')"></i>
+                                        </div>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
                     <!-- جستجوی کاربران -->
                     <div class="card mb-3">
                         <div class="card-body">
                             <div class="row g-2 align-items-end">
-                                <div class="col-md-10">
+                                <div class="col-md-8">
                                     <label class="form-label">جستجوی کاربران</label>
                                     <input type="text" 
                                            name="search_query" 
                                            class="form-control" 
-                                           placeholder="جستجو با نام، نام خانوادگی، کدسیستمی یا کدملی..."
+                                           placeholder="جستجو با نام، نام خانوادگی، کدسیستمی، کدملی یا موبایل..."
                                            value="<?php echo htmlspecialchars($searchQuery); ?>">
                                 </div>
-                                <div class="col-md-2">
+                                <div class="col-md-4">
                                     <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-primary w-100" name="search_users">
+                                        <button type="submit" class="btn btn-primary w-50" name="search_users">
                                             <i class="bi bi-search me-1"></i>جستجو
                                         </button>
                                         <?php if (!empty($searchQuery)): ?>
-                                            <button type="submit" class="btn btn-outline-secondary" name="clear_search" title="پاک کردن جستجو">
+                                            <button type="submit" class="btn btn-secondary w-50" name="clear_search" title="پاک کردن جستجو">
                                                 <i class="bi bi-x"></i>
                                             </button>
                                         <?php endif; ?>
@@ -388,84 +549,149 @@ foreach ($selectedUsers as $user) {
                         </div>
                     </div>
 
-                    <!-- لیست کاربران -->
-                    <div class="card">
-                        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                            <div>
-                                <i class="bi bi-list-ul me-2"></i>
-                                لیست کاربران
-                                <?php if ($users): ?>
-                                    <span class="badge bg-light text-dark ms-2"><?php echo $users->num_rows; ?> کاربر</span>
-                                <?php endif; ?>
+                    <!-- لیست کاربران حاصل از جستجو -->
+                    <?php if (!empty($searchedUsers) || !empty($selectedUsers)): ?>
+                        <div class="card">
+                            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="bi bi-search me-2"></i>
+                                    نتایج جستجو و کاربران انتخاب شده
+                                    <span class="badge bg-light text-dark ms-2">
+                                        <?php 
+                                            $totalUsers = count($searchedUsers);
+                                            $selectedCount = count($selectedUserIds);
+                                            echo $totalUsers . ' کاربر یافت شد' . ($selectedCount > 0 ? ' (' . $selectedCount . ' انتخاب شده)' : '');
+                                        ?>
+                                    </span>
+                                </div>
                             </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="select-all">
-                                <label class="form-check-label text-white" for="select-all">
-                                    انتخاب همه
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <div class="card-body p-0">
-                            <div class="user-list-container">
-                                <div class="user-list">
-                                    <?php
-                                    if ($users && $users->num_rows > 0) {
-                                        $users->data_seek(0);
-                                        while($user = $users->fetch_assoc()) {
+                            
+                            <div class="card-body p-0">
+                                <div class="user-list-container">
+                                    <div class="user-list">
+                                        <?php 
+                                        // نمایش کاربران جستجو شده
+                                        foreach ($searchedUsers as $user): 
                                             $isSelected = isset($selectedUserIds[$user['UserID']]);
-                                    ?>
-                                    <div class="user-item <?php echo $isSelected ? 'selected' : ''; ?>" 
-                                         data-user-id="<?php echo $user['UserID']; ?>">
-                                        <div class="d-flex align-items-center">
-                                            <input class="form-check-input user-checkbox" 
-                                                   type="checkbox" 
-                                                   value='<?php echo json_encode([
-                                                       'id' => $user['UserID'],
-                                                       'code' => $user['UserSysCode'],
-                                                       'name' => $user['UserName'] . ' ' . $user['UserFamily']
-                                                   ]); ?>'
-                                                   id="user_<?php echo $user['UserID']; ?>"
-                                                   <?php echo $isSelected ? 'checked' : ''; ?>>
-                                            <div class="user-info ms-3">
-                                                <div class="user-name">
-                                                    <?php echo htmlspecialchars($user['UserName'] . ' ' . $user['UserFamily']); ?>
-                                                </div>
-                                                <div class="user-details">
-                                                    <span class="me-3">
-                                                        کدسیستمی: <span class="user-code"><?php echo htmlspecialchars($user['UserSysCode']); ?></span>
-                                                    </span>
-                                                    <span>
-                                                        کدملی: <span class="user-code"><?php echo htmlspecialchars($user['UserMelli']); ?></span>
-                                                    </span>
+                                        ?>
+                                        <div class="user-item <?php echo $isSelected ? 'selected' : ''; ?>" 
+                                             data-user-id="<?php echo $user['UserID']; ?>">
+                                            <div class="d-flex align-items-center">
+                                                <input class="form-check-input user-checkbox" 
+                                                       type="checkbox" 
+                                                       value='<?php echo json_encode([
+                                                           'id' => $user['UserID'],
+                                                           'code' => $user['UserSysCode'],
+                                                           'name' => $user['UserName'] . ' ' . $user['UserFamily']
+                                                       ]); ?>'
+                                                       id="user_<?php echo $user['UserID']; ?>"
+                                                       <?php echo $isSelected ? 'checked' : ''; ?>>
+                                                <div class="user-info ms-3">
+                                                    <div class="user-name">
+                                                        <?php echo htmlspecialchars($user['UserName'] . ' ' . $user['UserFamily']); ?>
+                                                        <?php if ($isSelected): ?>
+                                                            <span class="badge bg-success ms-2">انتخاب شده</span>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <div class="user-details">
+                                                        <span class="me-3">
+                                                            کدسیستمی: <span class="user-code"><?php echo htmlspecialchars($user['UserSysCode']); ?></span>
+                                                        </span>
+                                                        <span class="me-3">
+                                                            کدملی: <span class="user-code"><?php echo htmlspecialchars($user['UserMelli']); ?></span>
+                                                        </span>
+                                                        <?php if ($user['UserMobile1']): ?>
+                                                            <span class="me-3">
+                                                                موبایل: <span class="user-code"><?php echo htmlspecialchars($user['UserMobile1']); ?></span>
+                                                            </span>
+                                                        <?php endif; ?>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
+                                        <?php endforeach; ?>
+                                        
+                                        <?php 
+                                        // نمایش کاربران انتخاب شده که ممکن است در نتایج جستجو نباشند
+                                        foreach ($selectedUserIds as $userId => $selectedUser):
+                                            // بررسی آیا کاربر در نتایج جستجو هست یا نه
+                                            $foundInSearch = false;
+                                            foreach ($searchedUsers as $searchedUser) {
+                                                if ($searchedUser['UserID'] == $userId) {
+                                                    $foundInSearch = true;
+                                                    break;
+                                                }
+                                            }
+                                            
+                                            if (!$foundInSearch && isset($selectedUser['id'])): 
+                                        ?>
+                                        <div class="user-item selected" data-user-id="<?php echo $selectedUser['id']; ?>">
+                                            <div class="d-flex align-items-center">
+                                                <input class="form-check-input user-checkbox" 
+                                                       type="checkbox" 
+                                                       value='<?php echo json_encode([
+                                                           'id' => $selectedUser['id'],
+                                                           'code' => $selectedUser['code'],
+                                                           'name' => $selectedUser['name']
+                                                       ]); ?>'
+                                                       id="user_<?php echo $selectedUser['id']; ?>"
+                                                       checked>
+                                                <div class="user-info ms-3">
+                                                    <div class="user-name">
+                                                        <?php echo htmlspecialchars($selectedUser['name']); ?>
+                                                        <span class="badge bg-success ms-2">انتخاب شده</span>
+                                                    </div>
+                                                    <div class="user-details">
+                                                        <span class="me-3">
+                                                            کدسیستمی: <span class="user-code"><?php echo htmlspecialchars($selectedUser['code']); ?></span>
+                                                        </span>
+                                                        <span class="me-3 text-muted">
+                                                            (این کاربر در نتایج جستجوی فعلی نیست)
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <?php 
+                                            endif;
+                                        endforeach; 
+                                        ?>
+                                        
+                                        <?php if (empty($searchedUsers) && empty($selectedUserIds)): ?>
+                                            <div class="p-4 text-center text-muted w-100">
+                                                <?php if (!empty($searchQuery)): ?>
+                                                    <i class="bi bi-search display-4 d-block mb-3"></i>
+                                                    <h5>هیچ کاربری یافت نشد</h5>
+                                                    <p class="mb-0">لطفا عبارت جستجو را تغییر دهید</p>
+                                                <?php else: ?>
+                                                    <i class="bi bi-people display-4 d-block mb-3"></i>
+                                                    <h5>کاربری یافت نشد</h5>
+                                                    <p class="mb-0">برای جستجوی کاربران، عبارتی در کادر جستجو وارد کنید</p>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
-                                    <?php
-                                        }
-                                    } else {
-                                        echo '<div class="p-4 text-center text-muted w-100">';
-                                        if (!empty($searchQuery)) {
-                                            echo '<i class="bi bi-search display-4 d-block mb-3"></i>';
-                                            echo '<h5>هیچ کاربری یافت نشد</h5>';
-                                            echo '<p class="mb-0">لطفا عبارت جستجو را تغییر دهید</p>';
-                                        } else {
-                                            echo '<i class="bi bi-people display-4 d-block mb-3"></i>';
-                                            echo '<h5>کاربری یافت نشد</h5>';
-                                            echo '<p class="mb-0">هیچ کاربری در سیستم ثبت نشده است</p>';
-                                        }
-                                        echo '</div>';
-                                    }
-                                    ?>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    <?php elseif (!empty($searchQuery)): ?>
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            هیچ کاربری با عبارت "<?php echo htmlspecialchars($searchQuery); ?>" یافت نشد.
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
-            <input type="hidden" name="CalssUsers" id="CalssUsers" value="<?php echo htmlspecialchars($classData['CalssUsers'] ?? '[]'); ?>">
+            <input type="hidden" name="CalssUsers" id="CalssUsers" value="<?php 
+                if ($editMode) {
+                    echo htmlspecialchars($classData['CalssUsers'] ?? '[]');
+                } elseif (isset($_SESSION['form_data']['CalssUsers'])) {
+                    echo htmlspecialchars($_SESSION['form_data']['CalssUsers']);
+                } else {
+                    echo htmlspecialchars($classData['CalssUsers'] ?? '[]');
+                }
+            ?>">
             
             <!-- دکمه‌های عملیات -->
             <div class="row mt-4">
@@ -479,6 +705,10 @@ foreach ($selectedUsers as $user) {
                             <a href="class.php" class="btn btn-secondary btn-lg">
                                 <i class="bi bi-x-circle me-2"></i>انصراف
                             </a>
+                        <?php else: ?>
+                            <button type="submit" class="btn btn-warning btn-lg" name="clear_form" onclick="return confirm('آیا مطمئن هستید که می‌خواهید همه اطلاعات فرم را پاک کنید؟')">
+                                <i class="bi bi-eraser me-2"></i>حذف اطلاعات فرم
+                            </button>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -602,67 +832,150 @@ foreach ($selectedUsers as $user) {
 
 <script>
 $(document).ready(function() {
-    // Update selection counts
+    // تابع بروزرسانی تعداد کاربران انتخاب شده
     function updateSelectionCounts() {
-        const selectedCount = $('input.user-checkbox:checked').length;
-        $('#selected-count').text(selectedCount);
+        let selectedUsers = [];
+        try {
+            const calssUsers = $('#CalssUsers').val();
+            selectedUsers = JSON.parse(calssUsers);
+        } catch(e) {
+            selectedUsers = [];
+        }
+        $('#selected-count').text(selectedUsers.length);
     }
     
-    // Update the hidden input with selected users
-    function updateUsersHiddenInput() {
-        const selectedUsers = [];
+    // تابع بروزرسانی لیست کاربران انتخاب شده در نمایش
+    function updateSelectedUsersList() {
+        let selectedUsers = [];
+        try {
+            const calssUsers = $('#CalssUsers').val();
+            selectedUsers = JSON.parse(calssUsers);
+        } catch(e) {
+            selectedUsers = [];
+        }
         
-        $('input.user-checkbox:checked').each(function() {
-            try {
-                const userData = JSON.parse($(this).val());
-                if (userData && userData.id) {
-                    selectedUsers.push({
-                        id: userData.id.toString(),
-                        code: userData.code || '',
-                        name: userData.name || '',
-                        type: 'teen'
-                    });
-                }
-            } catch (e) {
-                console.error('Error parsing user data:', e);
+        const $selectedList = $('#selected-users-list');
+        $selectedList.empty();
+        
+        if (selectedUsers.length === 0) {
+            if ($selectedList.closest('.selected-users-container').length) {
+                $selectedList.closest('.selected-users-container').hide();
             }
+        } else {
+            if ($selectedList.closest('.selected-users-container').length) {
+                $selectedList.closest('.selected-users-container').show();
+            }
+            selectedUsers.forEach(function(user) {
+                const userHtml = `
+                    <div class="selected-user-item" data-user-id="${user.id}">
+                        <span>${user.name} (کد: ${user.code})</span>
+                        <i class="bi bi-x-circle remove-user-btn" onclick="removeSelectedUser('${user.id}')"></i>
+                    </div>
+                `;
+                $selectedList.append(userHtml);
+            });
+        }
+        
+        updateSelectionCounts();
+    }
+    
+    // تابع حذف کاربر از لیست انتخاب‌شده‌ها
+    window.removeSelectedUser = function(userId) {
+        let selectedUsers = [];
+        try {
+            const calssUsers = $('#CalssUsers').val();
+            selectedUsers = JSON.parse(calssUsers);
+        } catch(e) {
+            selectedUsers = [];
+        }
+        
+        // حذف کاربر با شناسه موردنظر
+        selectedUsers = selectedUsers.filter(function(user) {
+            return user.id !== userId;
         });
         
-        const jsonData = JSON.stringify(selectedUsers);
-        $('#CalssUsers').val(jsonData);
-        updateSelectionCounts();
+        // آپدیت فیلد مخفی
+        $('#CalssUsers').val(JSON.stringify(selectedUsers));
+        
+        // آپدیت چک‌باکس‌ها
+        $(`input.user-checkbox[value*='"id":"${userId}"']`).prop('checked', false);
+        $(`.user-item[data-user-id="${userId}"]`).removeClass('selected');
+        $(`.user-item[data-user-id="${userId}"] .badge.bg-success`).remove();
+        
+        updateSelectedUsersList();
+    };
+    
+    // تابع افزودن کاربر به لیست انتخاب‌شده‌ها
+    function addSelectedUser(userData) {
+        let selectedUsers = [];
+        try {
+            const calssUsers = $('#CalssUsers').val();
+            selectedUsers = JSON.parse(calssUsers);
+        } catch(e) {
+            selectedUsers = [];
+        }
+        
+        // بررسی اینکه آیا کاربر قبلاً انتخاب شده یا نه
+        const existingIndex = selectedUsers.findIndex(function(user) {
+            return user.id === userData.id;
+        });
+        
+        if (existingIndex === -1) {
+            selectedUsers.push({
+                id: userData.id.toString(),
+                code: userData.code || '',
+                name: userData.name || '',
+                type: 'teen'
+            });
+            
+            // آپدیت فیلد مخفی
+            $('#CalssUsers').val(JSON.stringify(selectedUsers));
+            
+            // آپدیت نمایش
+            $(`.user-item[data-user-id="${userData.id}"]`).addClass('selected');
+            if (!$(`.user-item[data-user-id="${userData.id}"] .badge.bg-success`).length) {
+                $(`.user-item[data-user-id="${userData.id}"] .user-name`).append('<span class="badge bg-success ms-2">انتخاب شده</span>');
+            }
+            
+            updateSelectedUsersList();
+            return true;
+        }
+        return false;
     }
     
     // Handle checkbox changes
     $(document).on('change', 'input.user-checkbox', function() {
-        const $item = $(this).closest('.user-item');
         if ($(this).is(':checked')) {
-            $item.addClass('selected');
+            try {
+                const userData = JSON.parse($(this).val());
+                addSelectedUser(userData);
+            } catch(e) {
+                console.error('Error parsing user data:', e);
+            }
         } else {
-            $item.removeClass('selected');
+            // اگر تیک برداشته شد
+            try {
+                const userData = JSON.parse($(this).val());
+                window.removeSelectedUser(userData.id);
+            } catch(e) {
+                console.error('Error parsing user data:', e);
+            }
         }
-        updateUsersHiddenInput();
     });
     
     // Toggle selection on item click
     $(document).on('click', '.user-item', function(e) {
-        if (!$(e.target).is('input') && !$(e.target).is('label')) {
+        if (!$(e.target).is('input') && !$(e.target).is('label') && !$(e.target).is('i')) {
             const $checkbox = $(this).find('input.user-checkbox');
             $checkbox.prop('checked', !$checkbox.prop('checked')).trigger('change');
         }
-    });
-    
-    // Select all functionality
-    $('#select-all').on('change', function() {
-        const isChecked = $(this).is(':checked');
-        $('input.user-checkbox').prop('checked', isChecked).trigger('change');
     });
     
     // Handle form submission
     $('#class-form').on('submit', function(e) {
         // Only process if it's the main submit button
         const submitter = $(e.originalEvent?.submitter);
-        if (submitter.length && (submitter.attr('name') === 'search_users' || submitter.attr('name') === 'clear_search')) {
+        if (submitter.length && (submitter.attr('name') === 'search_users' || submitter.attr('name') === 'clear_search' || submitter.attr('name') === 'clear_form')) {
             return true; // Allow search form to submit
         }
         
@@ -675,18 +988,47 @@ $(document).ready(function() {
             return false;
         }
         
-        updateUsersHiddenInput();
+        // Validate date format
+        const dateStart = $('input[name="ClassDateStart"]').val().trim();
+        const dateEnd = $('input[name="ClassDateEnd"]').val().trim();
+        
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        
+        if (dateStart && !dateRegex.test(dateStart)) {
+            e.preventDefault();
+            alert('فرمت تاریخ شروع نامعتبر است. لطفا به صورت YYYY-MM-DD وارد کنید.');
+            $('input[name="ClassDateStart"]').focus();
+            return false;
+        }
+        
+        if (dateEnd && !dateRegex.test(dateEnd)) {
+            e.preventDefault();
+            alert('فرمت تاریخ پایان نامعتبر است. لطفا به صورت YYYY-MM-DD وارد کنید.');
+            $('input[name="ClassDateEnd"]').focus();
+            return false;
+        }
+        
         return true;
     });
     
     // Initialize on page load
     updateSelectionCounts();
+    if ($('#selected-users-list').children().length > 0) {
+        $('#selected-users-list').closest('.selected-users-container').show();
+    }
     
-    // Auto-update select all checkbox
-    $(document).on('change', 'input.user-checkbox', function() {
-        const totalCheckboxes = $('input.user-checkbox').length;
-        const checkedCheckboxes = $('input.user-checkbox:checked').length;
-        $('#select-all').prop('checked', totalCheckboxes > 0 && totalCheckboxes === checkedCheckboxes);
+    // تابع برای فرمت تاریخ هنگام تایپ
+    $('input[name="ClassDateStart"], input[name="ClassDateEnd"]').on('input', function() {
+        let value = $(this).val().replace(/\D/g, '');
+        
+        if (value.length > 4) {
+            value = value.substring(0, 4) + '-' + value.substring(4);
+        }
+        if (value.length > 7) {
+            value = value.substring(0, 7) + '-' + value.substring(7, 9);
+        }
+        
+        $(this).val(value);
     });
 });
 </script>
