@@ -9,7 +9,7 @@ if (!function_exists('jdate')) {
     <div class="container">
         <div class="footer-text">
             <i class="fas fa-copyright"></i>
-            مدیریت نوجوانان و بزرگسالان - <?php echo jdate('Y'); ?> | نسخه 1.0
+            سیستم مدیریت پایگاه بسیج شهید - <?php echo jdate('Y'); ?> | نسخه 1.1
         </div>
     </div>
 </footer>

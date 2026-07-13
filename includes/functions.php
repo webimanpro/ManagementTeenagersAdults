@@ -168,7 +168,7 @@ function set_setting($key, $value) {
  * @return string Background image URL
  */
 function get_background_image() {
-    $bg = get_setting('background', '/assets/images/background-pic1.jpeg');
+    $bg = get_setting('background', '/assets/images/pic1.jpeg');
     
     // If it's a relative path, construct full URL
     if (strpos($bg, '/') === 0) {
@@ -590,7 +590,7 @@ function initialize_system_settings() {
         // Set default background if not set
         $current_bg = get_setting('background');
         if (empty($current_bg)) {
-            set_setting('background', '/assets/images/background-pic1.jpeg');
+            set_setting('background', '/assets/images/pic1.jpeg');
         }
     }
 }

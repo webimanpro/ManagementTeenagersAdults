@@ -392,9 +392,10 @@ function formatSize($bytes, $precision = 2) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>مدیریت پشتیبان‌گیری</title>
     <link href="../assets/css/bootstrap.rtl.min.css" rel="stylesheet" />
-    <link href="../assets/css/font-awesome.min.css" rel="stylesheet" />
+	<link href="../assets/css/bootstrap-icons.css" rel="stylesheet" />
+    <link href="../assets/css/font-face.css" rel="stylesheet">
+    <link href="../assets/css/fontawesome.min.css" rel="stylesheet">
     <link href="../assets/css/style.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
 </head>
 <body>
     <?php include __DIR__ . '/header.php'; ?>

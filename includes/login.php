@@ -96,8 +96,9 @@ $background_image = get_background_image();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مدیریت نوجوانان و بزرگسالان</title>
+    <title>مدیریت نوجوانان</title>
     <link href="../assets/css/font-face.css" rel="stylesheet">
+    <link href="../assets/css/fontawesome.min.css" rel="stylesheet">
     <link href="../assets/css/bootstrap.rtl.min.css" rel="stylesheet">
     <link href="../assets/css/bootstrap-icons.css" rel="stylesheet">
     <link href="../assets/css/style.css" rel="stylesheet">

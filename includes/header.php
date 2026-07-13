@@ -28,7 +28,7 @@ if (isset($conn) && $conn) {
 
 // اگر پس‌زمینه‌ای تنظیم نشده، از پیش‌فرض استفاده کن
 if (!$globalBg) {
-    $globalBg = '/assets/images/background-pic1.jpeg';
+    $globalBg = '/assets/images/pic1.jpeg';
 }
 
 // Resolve logged-in user's full name from admins table
@@ -168,16 +168,16 @@ body.class-management-page {
                 <li class="nav-item has-submenu">
                     <a href="#" class="nav-link" role="button" aria-haspopup="true" aria-expanded="false">
                         <i class="fas fa-users"></i>
-                        نوجوانان بزرگسالان
+                         &nbsp; نوجوانان بزرگسالان
                         <i class="fas fa-chevron-down" style="font-size: 0.8em; margin-right: 5px;"></i>
                     </a>
                     <ul class="header-submenu">
                         <?php if (isManagerOrAbove()): ?>
-                        <li><a class="header-submenu-link" href="<?php echo $__rootBase; ?>/includes/regsiteruser.php"><i class="fas fa-user-plus"></i> ثبت نام</a></li>
-                        <li><a class="header-submenu-link" href="<?php echo $__rootBase; ?>/includes/edituser.php"><i class="fas fa-edit"></i> ویرایش</a></li>
-                        <li><a class="header-submenu-link" href="<?php echo $__rootBase; ?>/includes/listuser.php"><i class="fas fa-list"></i> لیست</a></li>
+                        <li><a class="header-submenu-link" href="<?php echo $__rootBase; ?>/includes/regsiteruser.php"><i class="fas fa-user-plus"></i>&nbsp; ثبت نام</a></li>
+                        <li><a class="header-submenu-link" href="<?php echo $__rootBase; ?>/includes/edituser.php"><i class="fas fa-edit"></i>&nbsp; ویرایش</a></li>
+                        <li><a class="header-submenu-link" href="<?php echo $__rootBase; ?>/includes/listuser.php"><i class="fas fa-list"></i>&nbsp; لیست</a></li>
                         <?php endif; ?>
-                        <li><a class="header-submenu-link" href="<?php echo $__rootBase; ?>/includes/rollcalluser.php"><i class="fas fa-clipboard-check"></i> حضور و غیاب</a></li>   
+                        <li><a class="header-submenu-link" href="<?php echo $__rootBase; ?>/includes/rollcalluser.php"><i class="fas fa-clipboard-check"></i>&nbsp; حضوروغیاب</a></li>   
                     </ul>
                 </li>
                 
@@ -185,7 +185,7 @@ body.class-management-page {
                 <li class="nav-item">
                     <a href="<?php echo $__rootBase; ?>/includes/class.php" class="nav-link">
                         <i class="fas fa-book"></i>
-                        دوره‌ها
+                         &nbsp; دوره‌ها
                     </a>
                 </li>
                 <?php endif; ?>
@@ -193,7 +193,7 @@ body.class-management-page {
                 <li class="nav-item">
                     <a href="<?php echo $__rootBase; ?>/includes/reportall.php" class="nav-link">
                         <i class="fas fa-chart-line"></i>
-                        گزارشات
+                         &nbsp; گزارشات
                     </a>
                 </li>
                 <?php endif; ?>

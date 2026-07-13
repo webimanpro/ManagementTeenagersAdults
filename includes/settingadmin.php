@@ -47,7 +47,7 @@ sort($bgFiles);
 
 // Default background if not set
 if (!$curBg) { 
-    $curBg = '/assets/images/background-pic1.jpg'; 
+    $curBg = '/assets/images/pic1.jpg'; 
     set_setting($conn, 'background', $curBg);
 }
 
@@ -136,7 +136,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>تنظیمات سیستم</title>
     <link href="../assets/css/bootstrap.rtl.min.css" rel="stylesheet" />
     <link href="../assets/css/bootstrap-icons.css" rel="stylesheet" />
-    <link href="../assets/css/font-awesome.min.css" rel="stylesheet" />
+    	<link href="../assets/css/font-face.css" rel="stylesheet">
+    <link href="../assets/css/fontawesome.min.css" rel="stylesheet">
     <link href="../assets/css/style.css" rel="stylesheet" />
     <style>
         body {

@@ -456,6 +456,8 @@ if (isset($_SESSION['preview_data'])) {
     <title>وارد کردن اطلاعات از اکسل</title>
     <link href="../assets/css/bootstrap.rtl.min.css" rel="stylesheet" />
     <link href="../assets/css/bootstrap-icons.css" rel="stylesheet" />
+	<link href="../assets/css/font-face.css" rel="stylesheet">
+    <link href="../assets/css/fontawesome.min.css" rel="stylesheet">
     <link href="../assets/css/style.css" rel="stylesheet" />
     <style>
         .upload-section {

@@ -233,6 +233,8 @@ if ($currentUserRole === 'admin') {
     <title>پروفایل کاربر - سیستم مدیریت</title>
     <link href="../assets/css/bootstrap.rtl.min.css" rel="stylesheet" />
     <link href="../assets/css/bootstrap-icons.css" rel="stylesheet" />
+	<link href="../assets/css/font-face.css" rel="stylesheet">
+    <link href="../assets/css/fontawesome.min.css" rel="stylesheet">
     <link href="../assets/css/style.css" rel="stylesheet" />
     <style>
         .modal-backdrop {

@@ -24,7 +24,7 @@ require_once '../assets/tcpdf/tcpdf.php';
 if (isset($_POST['export_excel']) || isset($_POST['print_report']) || isset($_POST['export_pdf'])) {
     $step = 5;
 } else {
-    $step = $_GET['step'] ?? ($_POST['step'] ?? 1);
+    $step = isset($_SESSION['current_step']) ? $_SESSION['current_step'] : ($_GET['step'] ?? ($_POST['step'] ?? 1));
 }
 
 // Initialize selected_users to true by default
@@ -43,6 +43,10 @@ if ($step == 1 && empty($_POST) && empty($_GET)) {
     $header_desc = '';
     $footer_desc = '';
     $report_name = '';
+    $card_type = '';
+    $issue_date = '';
+    $signatory = '';
+    $selected_user_ids = []; // برای ذخیره شناسه کاربران انتخاب شده در کارت
     
     // همچنین sessionها را پاک کن
     unset(
@@ -56,7 +60,13 @@ if ($step == 1 && empty($_POST) && empty($_GET)) {
         $_SESSION['selected_fields'],
         $_SESSION['header_desc'],
         $_SESSION['footer_desc'],
-        $_SESSION['report_name']
+        $_SESSION['report_name'],
+        $_SESSION['card_type'],
+        $_SESSION['issue_date'],
+        $_SESSION['signatory'],
+        $_SESSION['selected_user_ids'],
+        $_SESSION['current_step'],
+        $_SESSION['search_query']
     );
 }
 
@@ -74,6 +84,11 @@ $selected_fields = $_SESSION['selected_fields'] ?? [];
 $header_desc = $_SESSION['header_desc'] ?? '';
 $footer_desc = $_SESSION['footer_desc'] ?? '';
 $report_name = $_SESSION['report_name'] ?? '';
+$card_type = $_SESSION['card_type'] ?? '';
+$issue_date = $_SESSION['issue_date'] ?? '';
+$signatory = $_SESSION['signatory'] ?? '';
+$selected_user_ids = $_SESSION['selected_user_ids'] ?? [];
+$search_query = $_SESSION['search_query'] ?? '';
 
 // حالا اگر مقادیر در POST وجود دارند، آن‌ها را جایگزین کنیم
 if (isset($_POST['users'])) {
@@ -108,6 +123,21 @@ if (isset($_POST['footer_desc'])) {
 }
 if (isset($_POST['report_name'])) {
     $report_name = $_POST['report_name'];
+}
+if (isset($_POST['card_type'])) {
+    $card_type = $_POST['card_type'];
+}
+if (isset($_POST['issue_date'])) {
+    $issue_date = $_POST['issue_date'];
+}
+if (isset($_POST['signatory'])) {
+    $signatory = $_POST['signatory'];
+}
+if (isset($_POST['selected_user_ids'])) {
+    $selected_user_ids = json_decode($_POST['selected_user_ids'], true) ?: [];
+}
+if (isset($_POST['search_query'])) {
+    $search_query = $_POST['search_query'];
 }
 
 // Step 5: ذخیره گزارش
@@ -147,12 +177,19 @@ $users_fields = [
     'UserOtherActivity' => 'فعالیت های دیگر'
 ];
 
-// فیلدهای پیشفرض
+// فیلدهای پیشفرض برای گزارشات عادی
 $default_fields = ['UserSysCode', 'UserMelli', 'UserName', 'UserFamily', 'UserFather'];
+
+// فیلدهای مخصوص کارت
+$card_fields = ['UserName', 'UserFamily', 'UserFather', 'UserDateBirth', 'UserMelli', 'UserSysCode'];
 
 // تنظیم فیلدهای پیش‌فرض
 if (empty($selected_fields)) {
-    $selected_fields = $default_fields;
+    if ($report_type === 'card') {
+        $selected_fields = $card_fields;
+    } else {
+        $selected_fields = $default_fields;
+    }
 }
 
 // تاریخ پیش‌فرض (امروز به شمسی)
@@ -260,9 +297,46 @@ if ($classes_stmt) {
     $classes_stmt->close();
 }
 
+// جستجوی کاربران برای کارت
+$search_results = [];
+if (isset($_POST['search_users']) && !empty($search_query) && $report_type === 'card') {
+    $search_where = "1=1";
+    $search_where .= " AND (UserSysCode LIKE '%" . $conn->real_escape_string($search_query) . "%' 
+                        OR UserMelli LIKE '%" . $conn->real_escape_string($search_query) . "%'
+                        OR UserName LIKE '%" . $conn->real_escape_string($search_query) . "%'
+                        OR UserFamily LIKE '%" . $conn->real_escape_string($search_query) . "%')";
+    
+    $search_sql = "SELECT UserID, UserSysCode, UserMelli, UserName, UserFamily, UserFather, UserDateBirth
+                   FROM users 
+                   WHERE {$search_where} 
+                   ORDER BY CAST(UserSysCode AS UNSIGNED)";
+    $search_res = $conn->query($search_sql);
+    if ($search_res && $search_res->num_rows > 0) {
+        while ($row = $search_res->fetch_assoc()) {
+            $search_results[] = $row;
+        }
+    }
+}
+
 // پردازش فرم‌ها
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['step1'])) {
+    // ابتدا بررسی کنیم که آیا دکمه جستجو زده شده است
+    if (isset($_POST['search_users'])) {
+        // در این حالت، فقط مقادیر را در session ذخیره می‌کنیم و در همان مرحله 2 می‌مانیم
+        $_SESSION['report_type'] = $report_type;
+        $_SESSION['card_type'] = $card_type;
+        $_SESSION['selected_user_ids'] = $selected_user_ids;
+        $_SESSION['search_query'] = $search_query;
+        
+        // ذخیره نتایج جستجو در یک متغیر موقت یا می‌توانیم مستقیم از POST استفاده کنیم
+        // ما همینجا $search_results را پر کرده‌ایم
+        // نیازی به تغییر step نیست
+    } elseif (isset($_POST['clear_search'])) {
+        // پاک کردن جستجو
+        $search_query = '';
+        $_SESSION['search_query'] = '';
+        // در همان مرحله 2 می‌مانیم
+    } elseif (isset($_POST['step1'])) {
         // ذخیره در session
         $_SESSION['selected_users'] = $selected_users;
         $_SESSION['report_type'] = $report_type;
@@ -282,10 +356,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['selected_class'] = $selected_class;
         $_SESSION['syscode_from'] = $syscode_from;
         $_SESSION['syscode_to'] = $syscode_to;
+        $_SESSION['card_type'] = $card_type;
+        $_SESSION['selected_user_ids'] = $selected_user_ids;
         
-        if ($report_type === 'registration') {
-            // برای گزارش ثبت نام، بررسی محدوده کدسیستمی
-            $step = 3; // رفتن به مرحله انتخاب فیلدها
+        if ($report_type === 'card') {
+            // برای کارت، بررسی کنیم که حداقل یک کاربر انتخاب شده باشد
+            if (empty($selected_user_ids)) {
+                $error = "لطفاً حداقل یک کاربر را انتخاب کنید.";
+                $step = 2;
+            } else {
+                $step = 3; // رفتن به مرحله بعد
+            }
+        } elseif ($report_type === 'registration') {
+            // برای گزارش ثبت نام، محدوده کدسیستمی اختیاری است
+            $step = 3;
         } else {
             // برای سایر گزارشات، بررسی سال و ماه
             if (empty($selected_year) || empty($selected_month)) {
@@ -295,15 +379,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = "لطفاً دوره را انتخاب کنید.";
                 $step = 2;
             } else {
-                $step = 3; // رفتن به مرحله انتخاب فیلدها
+                $step = 3;
             }
         }
     } elseif (isset($_POST['step3'])) {
         // ذخیره در session
         $_SESSION['selected_fields'] = $selected_fields;
         
-        // بررسی انتخاب حداقل یک فیلد
-        if (empty($selected_fields)) {
+        // بررسی انتخاب حداقل یک فیلد (برای غیر از کارت)
+        if ($report_type !== 'card' && empty($selected_fields)) {
             $error = "لطفاً حداقل یک فیلد را انتخاب کنید.";
             $step = 3;
         } else {
@@ -314,6 +398,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['header_desc'] = $header_desc;
         $_SESSION['footer_desc'] = $footer_desc;
         $_SESSION['report_name'] = $report_name;
+        $_SESSION['issue_date'] = $issue_date;
+        $_SESSION['signatory'] = $signatory;
         
         $step = 5;
         
@@ -341,10 +427,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['selected_fields'],
             $_SESSION['header_desc'],
             $_SESSION['footer_desc'],
-            $_SESSION['report_name']
+            $_SESSION['report_name'],
+            $_SESSION['card_type'],
+            $_SESSION['issue_date'],
+            $_SESSION['signatory'],
+            $_SESSION['selected_user_ids'],
+            $_SESSION['search_query']
         );
         $step = 1;
     }
+    
+    // بعد از پردازش، مقدار step را در session ذخیره کنیم تا در درخواست‌های بعدی حفظ شود
+    $_SESSION['current_step'] = $step;
 }
 
 // تولید گزارش
@@ -388,6 +482,14 @@ if ($step >= 5 && $selected_users) {
             }
         }
         $report_title .= $jalali_months[$selected_month] . " " . $selected_year;
+    } elseif ($report_type === 'card') {
+        $report_title .= "چاپ کارت ";
+        if ($card_type === 'normal') {
+            $report_title .= "(عادی) ";
+        } elseif ($card_type === 'active') {
+            $report_title .= "(فعال) ";
+        }
+        $report_title .= "(" . count($selected_user_ids) . " کاربر)";
     }
 
     $report_title .= " (کاربران)";
@@ -399,7 +501,6 @@ if ($step >= 5 && $selected_users) {
         $params = [];
         $types = "";
         
-        // اضافه کردن شرایط فیلتر کدسیستمی
         if (!empty($syscode_from)) {
             $query .= " AND CAST(UserSysCode AS UNSIGNED) >= ?";
             $params[] = $syscode_from;
@@ -567,11 +668,29 @@ if ($step >= 5 && $selected_users) {
             }
             $stmt->close();
         }
+    } elseif ($report_type === 'card' && !empty($selected_user_ids)) {
+        // گزارش کارت: دریافت اطلاعات کاربران انتخاب شده
+        $placeholders = implode(',', array_fill(0, count($selected_user_ids), '?'));
+        $query = "SELECT " . implode(", ", $card_fields) . " FROM users WHERE UserID IN ($placeholders) ORDER BY CAST(UserSysCode AS UNSIGNED)";
+        $stmt = $conn->prepare($query);
+        $types = str_repeat('i', count($selected_user_ids));
+        $stmt->bind_param($types, ...$selected_user_ids);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        while ($row = $result->fetch_assoc()) {
+            // تبدیل تاریخ تولد به شمسی
+            if (!empty($row['UserDateBirth']) && $row['UserDateBirth'] != '0000-00-00') {
+                $row['UserDateBirth'] = gregorianToShamsi($row['UserDateBirth']);
+            }
+            $report_data[] = $row;
+        }
+        $stmt->close();
     }
 }
 
-// خروجی اکسل
-if (isset($_POST['export_excel']) && !empty($report_data)) {
+// خروجی اکسل (بدون تغییر)
+if (isset($_POST['export_excel']) && !empty($report_data) && $report_type !== 'card') {
     // پاک کردن output buffer
     ob_end_clean();
     header('Content-Type: application/vnd.ms-excel; charset=utf-8');
@@ -660,101 +779,364 @@ if (isset($_POST['export_excel']) && !empty($report_data)) {
 if (isset($_POST['print_report']) && !empty($report_data)) {
     // پاک کردن output buffer
     ob_end_clean();
-    echo '<!DOCTYPE html>';
-    echo '<html dir="rtl">';
-    echo '<head>';
-    echo '<meta charset="UTF-8">';
-    echo '<title>چاپ ' . $report_title . '</title>';
-    echo '<style>';
-    echo 'body { font-family: "B Nazanin", Tahoma, sans-serif; direction: rtl; margin: 20px; background: white; }';
-    echo '.print-header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #333; }';
-    echo '.print-header h1 { color: #2c3e50; margin: 0; font-family: "B Nazanin", Tahoma, sans-serif; font-size: 22px; }';
-    echo '.print-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-family: "B Nazanin", Tahoma, sans-serif; }';
-    echo '.print-table th { background-color: #34495e; color: white; padding: 10px; border: 1px solid #ddd; font-family: "B Nazanin", Tahoma, sans-serif; font-weight: bold; }';
-    echo '.print-table td { padding: 8px; border: 1px solid #ddd; text-align: center; font-family: "B Nazanin", Tahoma, sans-serif; }';
-    echo '.print-table tr:nth-child(even) { background-color: #f2f2f2; }';
-    echo '.header-desc { background-color: #ecf0f1; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center; border: 2px solid #bdc3c7; font-family: "B Nazanin", Tahoma, sans-serif; }';
-    echo '.footer-desc { background-color: #ecf0f1; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center; border: 2px solid #bdc3c7; font-family: "B Nazanin", Tahoma, sans-serif; }';
-    echo '.print-info { text-align: center; margin-top: 20px; font-size: 12px; color: #7f8c8d; font-family: "B Nazanin", Tahoma, sans-serif; }';
-    echo '@media print {';
-    echo '  .no-print { display: none; }';
-    echo '  body { margin: 10px; }';
-    echo '  .print-table { font-size: 10px; }';
-    echo '  .print-table th, .print-table td { padding: 6px; }';
-    echo '}';
-    echo '</style>';
-    echo '</head>';
-    echo '<body>';
     
-    echo '<div class="print-header">';
-    echo '<h1>' . $report_title . '</h1>';
-    echo '</div>';
-    
-    if (!empty($header_desc)) {
-        echo '<div class="header-desc">';
-        echo '<strong>توضیحات:</strong><br>' . nl2br(htmlspecialchars($header_desc));
+    if ($report_type === 'card') {
+        // تعیین تعداد کارت در هر صفحه بر اساس نوع کارت
+        $cards_per_row = 2;
+        if ($card_type === 'normal') {
+            $rows_per_page = 5; // 10 کارت در هر صفحه
+        } else {
+            $rows_per_page = 4; // 8 کارت در هر صفحه
+        }
+        $cards_per_page = $cards_per_row * $rows_per_page;
+        
+        ?>
+        <!DOCTYPE html>
+        <html dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <title>چاپ کارت</title>
+            <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                body {
+                    font-family: "B Nazanin", "Sahel", Tahoma, sans-serif;
+                    margin: 0;
+                    padding: 0;
+                    background: white;
+                    direction: rtl;
+                }
+                .page {
+                    width: 210mm;
+                    min-height: 297mm;
+                    page-break-after: always;
+                    position: relative;
+                    box-sizing: border-box;
+                    padding: 10mm;
+                    margin: 0 auto;
+                }
+                .card-grid {
+                    display: grid;
+                    grid-template-columns: repeat(<?php echo $cards_per_row; ?>, 1fr);
+                    grid-template-rows: repeat(<?php echo $rows_per_page; ?>, auto);
+                    gap: 8mm;
+                    width: 100%;
+                    height: 100%;
+                    min-height: 277mm;
+                }
+                .card {
+                    position: relative;
+                    background: transparent;
+                    overflow: visible;
+                    min-height: 45mm;
+                }
+                /* استایل مشترک برای همه فیلدها */
+                .card .field {
+                    position: absolute;
+                    right: 15%;
+                    font-family: "B Nazanin", "Sahel", Tahoma, sans-serif;
+                    font-size: 11pt;
+                    white-space: nowrap;
+                }
+                /* خط اول: نام */
+                .card .field-name {
+                    top: 12%;
+                    font-weight: bold;
+                    font-size: 12pt;
+                }
+                /* خط دوم: نام خانوادگی */
+                .card .field-family {
+                    top: 24%;
+                    font-weight: bold;
+                    font-size: 12pt;
+                }
+                /* خط سوم: نام پدر */
+                .card .field-father {
+                    top: 36%;
+                }
+                /* خط چهارم: تاریخ تولد */
+                .card .field-birth {
+                    top: 48%;
+                }
+                /* خط پنجم: کد ملی */
+                .card .field-national {
+                    top: 60%;
+                }
+                /* خط ششم: کدسیستمی */
+                .card .field-syscode {
+                    top: 72%;
+                }
+                /* تاریخ صدور (در مقابل کدسیستمی) */
+                .card .field-issue {
+                    position: absolute;
+                    top: 72%;
+                    left: 30%;
+                    right: auto;
+                    font-size: 10pt;
+                }
+                /* نام امضا کننده (در مقابل کدسیستمی) */
+                .card .field-signatory {
+                    position: absolute;
+                    top: 72%;
+                    left: 5%;
+                    right: auto;
+                    font-size: 10pt;
+                }
+                /* تنظیمات برای کارت فعال (اگر نیاز به جابجایی باشد) */
+                .card.active .field-name { top: 12%; }
+                .card.active .field-family { top: 24%; }
+                .card.active .field-father { top: 36%; }
+                .card.active .field-birth { top: 48%; }
+                .card.active .field-national { top: 60%; }
+                .card.active .field-syscode { top: 72%; }
+                .card.active .field-issue { top: 72%; }
+                .card.active .field-signatory { top: 84%; }
+                
+                /* دکمه‌های کنترل چاپ */
+                .print-controls {
+                    position: fixed;
+                    bottom: 20px;
+                    left: 20px;
+                    right: 20px;
+                    background: rgba(0,0,0,0.8);
+                    padding: 15px;
+                    border-radius: 10px;
+                    text-align: center;
+                    z-index: 10000;
+                    direction: ltr;
+                }
+                .print-controls button {
+                    padding: 10px 20px;
+                    margin: 0 10px;
+                    font-size: 14px;
+                    cursor: pointer;
+                    border: none;
+                    border-radius: 5px;
+                    font-family: inherit;
+                }
+                .btn-print { background: #4a6cf7; color: white; }
+                .btn-close { background: #dc3545; color: white; }
+                .btn-margin-plus { background: #28a745; color: white; }
+                .btn-margin-minus { background: #ffc107; color: black; }
+                
+                /* تنظیمات حاشیه قابل تنظیم */
+                .margin-control {
+                    display: inline-block;
+                    margin: 0 20px;
+                    color: white;
+                    direction: ltr;
+                }
+                .margin-control input {
+                    width: 60px;
+                    text-align: center;
+                }
+                
+                @media print {
+                    .print-controls {
+                        display: none;
+                    }
+                    .page {
+                        padding: 0;
+                        margin: 0;
+                    }
+                    .card {
+                        break-inside: avoid;
+                        page-break-inside: avoid;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="print-controls">
+                <button class="btn-margin-minus" onclick="adjustMargin(-2)">کاهش حاشیه -</button>
+                <div class="margin-control">
+                    حاشیه بالا: <input type="number" id="top-margin" value="10" step="1" onchange="setMargin()"> mm
+                </div>
+                <button class="btn-margin-plus" onclick="adjustMargin(2)">افزایش حاشیه +</button>
+                <button class="btn-print" onclick="window.print()">🖨️ چاپ گزارش</button>
+                <button class="btn-close" onclick="window.close()">✖ بستن</button>
+            </div>
+            
+            <div id="pages-container">
+            <?php
+            $total_cards = count($report_data);
+            $page_count = ceil($total_cards / $cards_per_page);
+            $card_index = 0;
+            for ($page = 0; $page < $page_count; $page++) {
+                echo '<div class="page" id="page-' . $page . '">';
+                echo '<div class="card-grid">';
+                for ($row = 0; $row < $rows_per_page; $row++) {
+                    for ($col = 0; $col < $cards_per_row; $col++) {
+                        if ($card_index < $total_cards) {
+                            $user = $report_data[$card_index];
+                            $card_class = ($card_type === 'normal') ? 'normal' : 'active';
+                            echo '<div class="card ' . $card_class . '">';
+                            
+                            // خط اول: نام
+                            echo '<div class="field field-name">' . htmlspecialchars($user['UserName'] ?? '') . '</div>';
+                            
+                            // خط دوم: نام خانوادگی
+                            echo '<div class="field field-family">' . htmlspecialchars($user['UserFamily'] ?? '') . '</div>';
+                            
+                            // خط سوم: نام پدر
+                            echo '<div class="field field-father">' . htmlspecialchars($user['UserFather'] ?? '') . '</div>';
+                            
+                            // خط چهارم: تاریخ تولد
+                            echo '<div class="field field-birth">' . htmlspecialchars($user['UserDateBirth'] ?? '') . '</div>';
+                            
+                            // خط پنجم: کد ملی
+                            echo '<div class="field field-national">' . htmlspecialchars($user['UserMelli'] ?? '') . '</div>';
+                            
+                            // خط ششم: کدسیستمی (سمت راست)
+                            echo '<div class="field field-syscode">' . htmlspecialchars($user['UserSysCode'] ?? '') . '</div>';
+                            
+                            // تاریخ صدور (در مقابل کدسیستمی - سمت چپ)
+                            echo '<div class="field field-issue">' . htmlspecialchars($issue_date) . '</div>';
+                            
+                            // نام امضاء کننده (در مقابل کدسیستمی - سمت چپ پایین)
+                            echo '<div class="field field-signatory">' . htmlspecialchars($signatory) . '</div>';
+                            
+                            echo '</div>'; // card
+                            $card_index++;
+                        } else {
+                            // کارت خالی برای پر کردن فضا
+                            echo '<div class="card" style="visibility: hidden;"></div>';
+                        }
+                    }
+                }
+                echo '</div>'; // card-grid
+                echo '</div>'; // page
+            }
+            ?>
+            </div>
+            
+            <script>
+                function adjustMargin(delta) {
+                    let input = document.getElementById('top-margin');
+                    let newValue = parseInt(input.value) + delta;
+                    if (newValue >= 0 && newValue <= 50) {
+                        input.value = newValue;
+                        setMargin();
+                    }
+                }
+                
+                function setMargin() {
+                    let margin = document.getElementById('top-margin').value;
+                    let pages = document.querySelectorAll('.page');
+                    pages.forEach(page => {
+                        page.style.paddingTop = margin + 'mm';
+                        page.style.paddingBottom = margin + 'mm';
+                    });
+                }
+                
+                // تنظیم اولیه
+                setMargin();
+            </script>
+        </body>
+        </html>
+        <?php
+        exit;
+    } else {
+        // چاپ عادی
+        echo '<!DOCTYPE html>';
+        echo '<html dir="rtl">';
+        echo '<head>';
+        echo '<meta charset="UTF-8">';
+        echo '<title>چاپ ' . $report_title . '</title>';
+        echo '<style>';
+        echo 'body { font-family: "B Nazanin", Tahoma, sans-serif; direction: rtl; margin: 20px; background: white; }';
+        echo '.print-header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #333; }';
+        echo '.print-header h1 { color: #2c3e50; margin: 0; font-family: "B Nazanin", Tahoma, sans-serif; font-size: 22px; }';
+        echo '.print-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-family: "B Nazanin", Tahoma, sans-serif; }';
+        echo '.print-table th { background-color: #34495e; color: white; padding: 10px; border: 1px solid #ddd; font-family: "B Nazanin", Tahoma, sans-serif; font-weight: bold; }';
+        echo '.print-table td { padding: 8px; border: 1px solid #ddd; text-align: center; font-family: "B Nazanin", Tahoma, sans-serif; }';
+        echo '.print-table tr:nth-child(even) { background-color: #f2f2f2; }';
+        echo '.header-desc { background-color: #ecf0f1; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center; border: 2px solid #bdc3c7; font-family: "B Nazanin", Tahoma, sans-serif; }';
+        echo '.footer-desc { background-color: #ecf0f1; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center; border: 2px solid #bdc3c7; font-family: "B Nazanin", Tahoma, sans-serif; }';
+        echo '.print-info { text-align: center; margin-top: 20px; font-size: 12px; color: #7f8c8d; font-family: "B Nazanin", Tahoma, sans-serif; }';
+        echo '@media print {';
+        echo '  .no-print { display: none; }';
+        echo '  body { margin: 10px; }';
+        echo '  .print-table { font-size: 10px; }';
+        echo '  .print-table th, .print-table td { padding: 6px; }';
+        echo '}';
+        echo '</style>';
+        echo '</head>';
+        echo '<body>';
+        
+        echo '<div class="print-header">';
+        echo '<h1>' . $report_title . '</h1>';
         echo '</div>';
-    }
-    
-    echo '<table class="print-table">';
-    echo '<thead>';
-    echo '<tr>';
-    echo '<th>ردیف</th>';
-    foreach ($selected_fields as $field) {
-        $field_name = $users_fields[$field] ?? $field;
-        echo '<th>' . $field_name . '</th>';
-    }
-    if ($report_type === 'attendance' || $report_type === 'class') {
-        echo '<th>حضور</th>';
-        echo '<th>غیبت</th>';
-        echo '<th>مرخصی</th>';
-        echo '<th>جمع</th>';
-    }
-    echo '</tr>';
-    echo '</thead>';
-    echo '<tbody>';
-    
-    $counter = 1;
-    foreach ($report_data as $row) {
+        
+        if (!empty($header_desc)) {
+            echo '<div class="header-desc">';
+            echo '<strong>توضیحات:</strong><br>' . nl2br(htmlspecialchars($header_desc));
+            echo '</div>';
+        }
+        
+        echo '<table class="print-table">';
+        echo '<thead>';
         echo '<tr>';
-        echo '<td>' . $counter++ . '</td>';
+        echo '<th>ردیف</th>';
         foreach ($selected_fields as $field) {
-            $value = $row[$field] ?? '';
-            echo '<td>' . htmlspecialchars($value) . '</td>';
+            $field_name = $users_fields[$field] ?? $field;
+            echo '<th>' . $field_name . '</th>';
         }
         if ($report_type === 'attendance' || $report_type === 'class') {
-            echo '<td>' . ($row['present_count'] ?? 0) . '</td>';
-            echo '<td>' . ($row['absent_count'] ?? 0) . '</td>';
-            echo '<td>' . ($row['excused_count'] ?? 0) . '</td>';
-            echo '<td>' . (($row['present_count'] ?? 0) + ($row['absent_count'] ?? 0) + ($row['excused_count'] ?? 0)) . '</td>';
+            echo '<th>حضور</th>';
+            echo '<th>غیبت</th>';
+            echo '<th>مرخصی</th>';
+            echo '<th>جمع</th>';
         }
         echo '</tr>';
-    }
-    echo '</tbody>';
-    echo '</table>';
-    
-    if (!empty($footer_desc)) {
-        echo '<div class="footer-desc">';
-        echo '<strong>توضیحات پایانی:</strong><br>' . nl2br(htmlspecialchars($footer_desc));
+        echo '</thead>';
+        echo '<tbody>';
+        
+        $counter = 1;
+        foreach ($report_data as $row) {
+            echo '<tr>';
+            echo '<td>' . $counter++ . '</td>';
+            foreach ($selected_fields as $field) {
+                $value = $row[$field] ?? '';
+                echo '<td>' . htmlspecialchars($value) . '</td>';
+            }
+            if ($report_type === 'attendance' || $report_type === 'class') {
+                echo '<td>' . ($row['present_count'] ?? 0) . '</td>';
+                echo '<td>' . ($row['absent_count'] ?? 0) . '</td>';
+                echo '<td>' . ($row['excused_count'] ?? 0) . '</td>';
+                echo '<td>' . (($row['present_count'] ?? 0) + ($row['absent_count'] ?? 0) + ($row['excused_count'] ?? 0)) . '</td>';
+            }
+            echo '</tr>';
+        }
+        echo '</tbody>';
+        echo '</table>';
+        
+        if (!empty($footer_desc)) {
+            echo '<div class="footer-desc">';
+            echo '<strong>توضیحات پایانی:</strong><br>' . nl2br(htmlspecialchars($footer_desc));
+            echo '</div>';
+        }
+        
+        echo '<div class="print-info">';
+        echo '<p>تعداد رکوردها: ' . count($report_data) . ' | تاریخ تولید: ' . gregorianToShamsi(date('Y-m-d')) . ' | زمان تولید: ' . date('H:i:s') . '</p>';
         echo '</div>';
+        
+        echo '<div class="no-print" style="text-align: center; margin-top: 20px;">';
+        echo '<button onclick="window.print()" style="padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-family: \'B Nazanin\', Tahoma, sans-serif;">چاپ گزارش</button>';
+        echo '<a href="reportall.php" style="display:inline-block;padding:10px 20px;background:#e74c3c;color:white;border-radius:5px;text-decoration:none;margin-right:10px;font-family: \'B Nazanin\', Tahoma, sans-serif;">بستن</a>';
+        echo '</div>';
+        
+        echo '</body>';
+        echo '</html>';
+        exit;
     }
-    
-    echo '<div class="print-info">';
-    echo '<p>تعداد رکوردها: ' . count($report_data) . ' | تاریخ تولید: ' . gregorianToShamsi(date('Y-m-d')) . ' | زمان تولید: ' . date('H:i:s') . '</p>';
-    echo '</div>';
-    
-    echo '<div class="no-print" style="text-align: center; margin-top: 20px;">';
-    echo '<button onclick="window.print()" style="padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-family: \'B Nazanin\', Tahoma, sans-serif;">چاپ گزارش</button>';
-    echo '<a href="reportall.php" style="display:inline-block;padding:10px 20px;background:#e74c3c;color:white;border-radius:5px;text-decoration:none;margin-right:10px;font-family: \'B Nazanin\', Tahoma, sans-serif;">بستن</a>';
-    echo '</div>';
-    
-    echo '</body>';
-    echo '</html>';
-    exit;
 }
 
-// خروجی PDF
-if (isset($_POST['export_pdf']) && !empty($report_data)) {
+// خروجی PDF (بدون تغییر)
+if (isset($_POST['export_pdf']) && !empty($report_data) && $report_type !== 'card') {
     // پاک کردن output buffer
     ob_end_clean();
     
@@ -777,11 +1159,6 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
     // تنظیم فونت برای پشتیبانی از فارسی
     $pdf->SetFont('dejavusans', '', 10);
     
-    // عنوان گزارش
-    //$pdf->SetFont('dejavusans', 'B', 16);
-    //$pdf->Cell(0, 15, $report_title, 0, 1, 'C');
-    //$pdf->Ln(5);
-    
     // توضیحات هدر - در وسط و داخل کادر با رنگ پس‌زمینه
     if (!empty($header_desc)) {
         // محاسبه ارتفاع مورد نیاز برای متن
@@ -793,7 +1170,6 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
         
         // رسم کادر با پس‌زمینه
         $header_y = $pdf->GetY();
-
         
         // نوشتن عنوان توضیحات با فونت بزرگتر و بولد
         $pdf->SetFont('dejavusans', 'B', 14);
@@ -903,7 +1279,6 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
         
         // رسم کادر با پس‌زمینه
         $footer_y = $pdf->GetY();
-
         
         // نوشتن عنوان توضیحات با فونت بزرگتر و بولد
         $pdf->SetFont('dejavusans', 'B', 14);
@@ -933,9 +1308,11 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>گزارشات جامع</title>
     <link href="../assets/css/bootstrap.rtl.min.css" rel="stylesheet">
-    <link href="../assets/css/font-awesome.min.css" rel="stylesheet">
+	<link href="../assets/css/font-face.css" rel="stylesheet">
+    <link href="../assets/css/fontawesome.min.css" rel="stylesheet">
     <link href="../assets/css/style.css" rel="stylesheet">
     <style>
+        /* استایل‌های قبلی */
         .report-container {
             margin-top: 100px;
             margin-bottom: 50px;
@@ -1055,6 +1432,50 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
         .field-checkbox {
             margin-bottom: 10px;
         }
+        /* استایل‌های جدید برای انتخاب کاربران */
+        .user-search-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .user-list-container {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            margin-top: 15px;
+        }
+        .user-item {
+            padding: 8px 12px;
+            border-bottom: 1px solid #f1f1f1;
+            cursor: pointer;
+        }
+        .user-item:hover {
+            background-color: #e9ecef;
+        }
+        .user-item.selected {
+            background-color: #d4edda;
+        }
+        .selected-users-container {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 5px;
+        }
+        .selected-user-badge {
+            display: inline-block;
+            background: #4a6cf7;
+            color: white;
+            padding: 5px 10px;
+            margin: 3px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+        .selected-user-badge i {
+            margin-left: 5px;
+            cursor: pointer;
+        }
         @media (max-width: 768px) {
             .report-container {
                 margin-top: 80px;
@@ -1106,6 +1527,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                             if ($saved_report['report_type'] === 'registration') $type_text = 'ثبت نام';
                             elseif ($saved_report['report_type'] === 'attendance') $type_text = 'حضور و غیاب';
                             elseif ($saved_report['report_type'] === 'class') $type_text = 'دوره';
+                            elseif ($saved_report['report_type'] === 'card') $type_text = 'چاپ کارت';
                             echo $type_text . ' - ' . $jalali_months[$saved_report['report_month']] . ' ' . $saved_report['report_year'];
                             ?>
                         </small>
@@ -1149,7 +1571,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
             <div class="form-section">
                 <h3 class="mb-4"><i class="fas fa-chart-pie"></i> مرحله 1: انتخاب نوع گزارش</h3>
                 <div class="row">
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-3 mb-3">
                         <div class="selection-card <?php echo $report_type === 'registration' ? 'selected' : ''; ?>" onclick="selectReportType('registration')">
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="report_type" value="registration" id="registration" <?php echo $report_type === 'registration' ? 'checked' : ''; ?>>
@@ -1160,7 +1582,7 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-3 mb-3">
                         <div class="selection-card <?php echo $report_type === 'attendance' ? 'selected' : ''; ?>" onclick="selectReportType('attendance')">
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="report_type" value="attendance" id="attendance" <?php echo $report_type === 'attendance' ? 'checked' : ''; ?>>
@@ -1171,13 +1593,24 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-4 mb-3">
+                    <div class="col-md-3 mb-3">
                         <div class="selection-card <?php echo $report_type === 'class' ? 'selected' : ''; ?>" onclick="selectReportType('class')">
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="report_type" value="class" id="class" <?php echo $report_type === 'class' ? 'checked' : ''; ?>>
                                 <label class="form-check-label w-100" for="class">
                                     <h5><i class="fas fa-book text-success"></i> لیست دوره</h5>
                                     <p class="text-muted mb-0">گزارش کاربران دوره‌های خاص</p>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="selection-card <?php echo $report_type === 'card' ? 'selected' : ''; ?>" onclick="selectReportType('card')">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="report_type" value="card" id="card" <?php echo $report_type === 'card' ? 'checked' : ''; ?>>
+                                <label class="form-check-label w-100" for="card">
+                                    <h5><i class="fas fa-id-card text-danger"></i> چاپ کارت</h5>
+                                    <p class="text-muted mb-0">چاپ کارت روی برگه‌های آماده</p>
                                 </label>
                             </div>
                         </div>
@@ -1194,19 +1627,21 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
             </div>
             <?php endif; ?>
 
-            <!-- Step 2: انتخاب تاریخ و دوره یا محدوده کدسیستمی -->
+            <!-- Step 2: انتخاب محدوده کدسیستمی یا جستجوی کاربران (برای کارت) -->
             <?php if ($step == 2): ?>
             <div class="form-section">
                 <h3 class="mb-4"><i class="fas fa-calendar-alt"></i> مرحله 2: 
                     <?php if ($report_type === 'registration'): ?>
                         انتخاب محدوده کدسیستمی
+                    <?php elseif ($report_type === 'card'): ?>
+                        جستجو و انتخاب کاربران
                     <?php else: ?>
                         انتخاب بازه زمانی <?php echo ($report_type === 'class' || $report_type === 'attendance') ? 'و دوره' : ''; ?>
                     <?php endif; ?>
                 </h3>
                 
                 <?php if ($report_type === 'registration'): ?>
-                <!-- برای گزارش ثبت نام: محدوده کدسیستمی -->
+                <!-- محدوده کدسیستمی -->
                 <div class="syscode-range">
                     <h5 class="text-info mb-3"><i class="fas fa-sort-numeric-up"></i> محدوده کدسیستمی</h5>
                     <div class="row g-3">
@@ -1223,11 +1658,111 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                             <small class="form-text text-muted">خالی بگذارید برای همه کدهای کوچکتر</small>
                         </div>
                     </div>
-                    <div class="alert alert-info mt-3">
-                        <i class="fas fa-info-circle"></i>
-                        برای گزارش ثبت نام، محدوده کدسیستمی را مشخص کنید. اگر هر دو فیلد خالی باشد، همه کاربران نمایش داده می‌شوند.
+                </div>
+                
+                <?php elseif ($report_type === 'card'): ?>
+                <!-- جستجوی کاربران -->
+                <div class="user-search-section">
+                    <h5 class="text-danger mb-3"><i class="fas fa-search"></i> جستجوی کاربران</h5>
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <input type="text" name="search_query" class="form-control" 
+                                   placeholder="جستجو با کدسیستمی، کدملی، نام یا نام خانوادگی" 
+                                   value="<?php echo htmlspecialchars($search_query); ?>">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" name="search_users" class="btn btn-primary w-100">
+                                <i class="fas fa-search"></i> جستجو
+                            </button>
+                        </div>
+                        <?php if (!empty($search_query)): ?>
+                        <div class="col-md-2">
+                            <button type="submit" name="clear_search" class="btn btn-secondary w-100">
+                                <i class="fas fa-times"></i> پاک کردن
+                            </button>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                    
+                    <!-- نتایج جستجو -->
+                    <?php if (!empty($search_results)): ?>
+                    <div class="user-list-container">
+                        <?php foreach ($search_results as $user): 
+                            $is_selected = in_array($user['UserID'], $selected_user_ids);
+                        ?>
+                        <div class="user-item <?php echo $is_selected ? 'selected' : ''; ?>" onclick="toggleUser(<?php echo $user['UserID']; ?>)">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="user_ids[]" 
+                                       id="user_<?php echo $user['UserID']; ?>" 
+                                       value="<?php echo $user['UserID']; ?>" 
+                                       <?php echo $is_selected ? 'checked' : ''; ?>
+                                       onchange="updateSelectedUsers(this)">
+                                <label class="form-check-label" for="user_<?php echo $user['UserID']; ?>">
+                                    <strong><?php echo htmlspecialchars($user['UserName'] . ' ' . $user['UserFamily']); ?></strong>
+                                    <small class="text-muted d-block">
+                                        کدسیستمی: <?php echo $user['UserSysCode']; ?> | 
+                                        کدملی: <?php echo $user['UserMelli']; ?>
+                                    </small>
+                                </label>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php elseif (!empty($search_query)): ?>
+                        <div class="alert alert-warning mt-3">هیچ کاربری با عبارت "<?php echo htmlspecialchars($search_query); ?>" یافت نشد.</div>
+                    <?php endif; ?>
+                    
+                    <!-- کاربران انتخاب شده -->
+                    <div class="selected-users-container">
+                        <h6>کاربران انتخاب شده:</h6>
+                        <div id="selected-users-list">
+                            <?php 
+                            if (!empty($selected_user_ids)) {
+                                $placeholders = implode(',', array_fill(0, count($selected_user_ids), '?'));
+                                $stmt = $conn->prepare("SELECT UserID, UserName, UserFamily, UserSysCode FROM users WHERE UserID IN ($placeholders)");
+                                $stmt->bind_param(str_repeat('i', count($selected_user_ids)), ...$selected_user_ids);
+                                $stmt->execute();
+                                $result = $stmt->get_result();
+                                while ($user = $result->fetch_assoc()) {
+                                    echo '<span class="selected-user-badge" data-id="' . $user['UserID'] . '">';
+                                    echo htmlspecialchars($user['UserName'] . ' ' . $user['UserFamily']) . ' (' . $user['UserSysCode'] . ')';
+                                    echo ' <i class="fas fa-times" onclick="removeSelectedUser(' . $user['UserID'] . ')"></i>';
+                                    echo '</span>';
+                                }
+                                $stmt->close();
+                            } else {
+                                echo '<p class="text-muted">هیچ کاربری انتخاب نشده است.</p>';
+                            }
+                            ?>
+                        </div>
+                    </div>
+                    
+                    <!-- انتخاب نوع کارت -->
+                    <div class="card-type-section mt-4">
+                        <h5 class="text-danger mb-3"><i class="fas fa-id-card"></i> نوع کارت</h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="card_type" value="normal" id="card_normal" <?php echo $card_type === 'normal' ? 'checked' : ''; ?> required>
+                                    <label class="form-check-label" for="card_normal">
+                                        <h6>کارت عادی (10 عدد در هر صفحه)</h6>
+                                        <p class="text-muted small">چاپ بر روی برگه با طرح کارت عادی</p>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="card_type" value="active" id="card_active" <?php echo $card_type === 'active' ? 'checked' : ''; ?> required>
+                                    <label class="form-check-label" for="card_active">
+                                        <h6>کارت فعال (8 عدد در هر صفحه)</h6>
+                                        <p class="text-muted small">چاپ بر روی برگه با طرح کارت فعال</p>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
+                
                 <?php else: ?>
                 <!-- برای سایر گزارشات: سال و ماه -->
                 <div class="row g-3">
@@ -1270,6 +1805,8 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                 </div>
                 <?php endif; ?>
                 
+                <input type="hidden" name="selected_user_ids" id="selected_user_ids" value='<?php echo json_encode($selected_user_ids); ?>'>
+                
                 <div class="action-buttons">
                     <a href="reportall.php?step=1" class="btn btn-secondary btn-lg">
                         <i class="fas fa-arrow-right"></i> مرحله قبل
@@ -1281,26 +1818,37 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
             </div>
             <?php endif; ?>
 
-            <!-- Step 3: انتخاب فیلدها -->
+            <!-- Step 3: انتخاب فیلدها (برای کارت غیرفعال است) -->
             <?php if ($step == 3): ?>
             <div class="form-section">
                 <h3 class="mb-4"><i class="fas fa-list-check"></i> مرحله 3: انتخاب فیلدهای گزارش</h3>
                 <div class="fields-section">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i>
-                        فیلدهای مورد نظر خود برای نمایش در گزارش را انتخاب کنید. فیلدهای انتخاب شده در خروجی چاپ و اکسل نمایش داده خواهند شد.
+                        <?php if ($report_type === 'card'): ?>
+                            برای چاپ کارت، فیلدهای ضروری (نام، نام خانوادگی، نام پدر، تاریخ تولد، کدملی، کدسیستمی) به صورت خودکار انتخاب می‌شوند.
+                        <?php else: ?>
+                            فیلدهای مورد نظر خود برای نمایش در گزارش را انتخاب کنید.
+                        <?php endif; ?>
                     </div>
                     <div class="field-group">
                         <h5><i class="fas fa-users text-primary"></i> فیلدهای کاربران</h5>
                         <div class="row">
-                            <?php foreach ($users_fields as $field => $label): ?>
+                            <?php 
+                            $fields_to_show = ($report_type === 'card') ? $card_fields : array_keys($users_fields);
+                            foreach ($fields_to_show as $field): 
+                                $label = $users_fields[$field] ?? $field;
+                                $disabled = ($report_type === 'card') ? 'disabled' : '';
+                                $checked = in_array($field, $selected_fields) ? 'checked' : '';
+                            ?>
                             <div class="col-md-4 col-sm-6 field-checkbox">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="fields[]" 
                                            value="<?php echo $field; ?>" 
-                                           id="field_user_<?php echo $field; ?>"
-                                           <?php echo in_array($field, $selected_fields) ? 'checked' : ''; ?>>
-                                    <label class="form-check-label" for="field_user_<?php echo $field; ?>">
+                                           id="field_<?php echo $field; ?>"
+                                           <?php echo $checked; ?>
+                                           <?php echo $disabled; ?>>
+                                    <label class="form-check-label" for="field_<?php echo $field; ?>">
                                         <?php echo $label; ?>
                                     </label>
                                 </div>
@@ -1320,24 +1868,41 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
             </div>
             <?php endif; ?>
 
-            <!-- Step 4: توضیحات هدر و فوتر -->
+            <!-- Step 4: توضیحات یا تاریخ صدور و امضاء -->
             <?php if ($step == 4): ?>
             <div class="form-section">
-                <h3 class="mb-4"><i class="fas fa-file-alt"></i> مرحله 4: توضیحات گزارش</h3>
+                <h3 class="mb-4"><i class="fas fa-file-alt"></i> مرحله 4: 
+                    <?php echo ($report_type === 'card') ? 'تاریخ صدور و نام امضاء کننده' : 'توضیحات گزارش'; ?>
+                </h3>
+                
+                <?php if ($report_type === 'card'): ?>
+                <div class="description-section">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">تاریخ صدور (شمسی):</label>
+                            <input type="text" name="issue_date" class="form-control" placeholder="مثال: 1403/06/15" 
+                                   value="<?php echo htmlspecialchars($issue_date ?: $currentShamsiDate); ?>">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">نام امضاء کننده:</label>
+                            <input type="text" name="signatory" class="form-control" placeholder="نام شخص امضاء کننده" 
+                                   value="<?php echo htmlspecialchars($signatory); ?>">
+                        </div>
+                    </div>
+                </div>
+                <?php else: ?>
                 <div class="description-section">
                     <h5 class="text-info mb-3"><i class="fas fa-heading"></i> توضیحات هدر گزارش</h5>
                     <div class="mb-4">
-                        <label class="form-label">توضیحات بالای گزارش (اختیاری):</label>
-                        <textarea name="header_desc" class="form-control" rows="4" placeholder="توضیحات یا یادداشت‌هایی که می‌خواهید در بالای گزارش نمایش داده شود..."><?php echo htmlspecialchars($header_desc); ?></textarea>
-                        <small class="form-text text-muted">این توضیحات در بالای گزارش و قبل از جدول داده‌ها نمایش داده می‌شود.</small>
+                        <textarea name="header_desc" class="form-control" rows="4" placeholder="توضیحات بالای گزارش..."><?php echo htmlspecialchars($header_desc); ?></textarea>
                     </div>
                     <h5 class="text-info mb-3"><i class="fas fa-file-alt"></i> توضیحات فوتر گزارش</h5>
                     <div class="mb-4">
-                        <label class="form-label">توضیحات پایین گزارش (اختیاری):</label>
-                        <textarea name="footer_desc" class="form-control" rows="4" placeholder="توضیحات یا یادداشت‌هایی که می‌خواهید در پایین گزارش نمایش داده شود..."><?php echo htmlspecialchars($footer_desc); ?></textarea>
-                        <small class="form-text text-muted">این توضیحات در پایین گزارش و بعد از جدول داده‌ها نمایش داده می‌شود.</small>
+                        <textarea name="footer_desc" class="form-control" rows="4" placeholder="توضیحات پایین گزارش..."><?php echo htmlspecialchars($footer_desc); ?></textarea>
                     </div>
                 </div>
+                <?php endif; ?>
+                
                 <div class="action-buttons">
                     <a href="reportall.php?step=3" class="btn btn-secondary btn-lg">
                         <i class="fas fa-arrow-right"></i> مرحله قبل
@@ -1388,88 +1953,116 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
                         <i class="fas fa-edit"></i> ویرایش پارامترها
                     </button>
                     <?php if (!empty($report_data)): ?>
-                    <button type="submit" name="export_excel" class="btn btn-success btn-lg">
-                        <i class="fas fa-file-excel"></i> خروجی Excel
-                    </button>
-                    <button type="submit" name="print_report" class="btn btn-primary btn-lg">
-                        <i class="fas fa-print"></i> چاپ گزارش
-                    </button>
-                    <button type="submit" name="export_pdf" class="btn btn-danger btn-lg">
-                        <i class="fas fa-file-pdf"></i> خروجی PDF
-                    </button>
+                        <?php if ($report_type !== 'card'): ?>
+                        <button type="submit" name="export_excel" class="btn btn-success btn-lg">
+                            <i class="fas fa-file-excel"></i> خروجی Excel
+                        </button>
+                        <?php endif; ?>
+                        <button type="submit" name="print_report" class="btn btn-primary btn-lg">
+                            <i class="fas fa-print"></i> چاپ گزارش
+                        </button>
+                        <?php if ($report_type !== 'card'): ?>
+                        <button type="submit" name="export_pdf" class="btn btn-danger btn-lg">
+                            <i class="fas fa-file-pdf"></i> خروجی PDF
+                        </button>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
                 
                 <!-- نمایش گزارش -->
                 <?php if (!empty($report_data)): ?>
-                <div class="report-result">
-                    <h4 class="text-center mb-4"><?php echo $report_title; ?></h4>
-                    
-                    <?php if (!empty($header_desc)): ?>
-                    <div class="alert alert-info text-center">
-                        <h5><i class="fas fa-heading"></i> توضیحات:</h5>
-                        <p class="mb-0"><?php echo nl2br(htmlspecialchars($header_desc)); ?></p>
-                    </div>
-                    <?php endif; ?>
-                    
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover">
-                            <thead class="table-dark-custom">
-                                <tr>
-                                    <th>#</th>
-                                    <?php foreach ($selected_fields as $field): ?>
-                                        <?php $field_name = $users_fields[$field] ?? $field; ?>
-                                        <th><?php echo $field_name; ?></th>
-                                    <?php endforeach; ?>
-                                    <?php if ($report_type === 'attendance' || $report_type === 'class'): ?>
-                                        <th>حضور</th>
-                                        <th>غیبت</th>
-                                        <th>مرخصی</th>
-                                        <th>جمع</th>
-                                    <?php endif; ?>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php $counter = 1; ?>
-                                <?php foreach ($report_data as $row): ?>
-                                    <tr>
-                                        <td><?php echo $counter++; ?></td>
-                                        <?php foreach ($selected_fields as $field): ?>
-                                            <td><?php echo htmlspecialchars($row[$field] ?? ''); ?></td>
-                                        <?php endforeach; ?>
-                                        <?php if ($report_type === 'attendance' || $report_type === 'class'): ?>
-                                            <td>
-                                                <span class="badge bg-success"><?php echo $row['present_count'] ?? 0; ?></span>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-danger"><?php echo $row['absent_count'] ?? 0; ?></span>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-warning"><?php echo $row['excused_count'] ?? 0; ?></span>
-                                            </td>
-                                            <td>
-                                                <strong><?php echo ($row['present_count'] ?? 0) + ($row['absent_count'] ?? 0) + ($row['excused_count'] ?? 0); ?></strong>
-                                            </td>
-                                        <?php endif; ?>
-                                    </tr>
+                    <?php if ($report_type === 'card'): ?>
+                        <!-- پیش‌نمایش کارت‌ها -->
+                        <div class="report-result">
+                            <h4 class="text-center mb-4"><?php echo $report_title; ?></h4>
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i>
+                                برای چاپ، از دکمه "چاپ گزارش" استفاده کنید. اطلاعات به گونه‌ای طراحی شده‌اند که بر روی برگه‌های از پیش چاپ شده (تصاویر p1.png یا p2.png) قرار گیرند. تعداد کارت در هر صفحه: <?php echo ($card_type === 'normal') ? '10' : '8'; ?> عدد.
+                            </div>
+                            <div class="row">
+                                <?php foreach ($report_data as $index => $user): ?>
+                                <div class="col-md-6 mb-4">
+                                    <div class="card">
+                                        <div class="card-header bg-secondary text-white">
+                                            کارت شماره <?php echo $index + 1; ?> - <?php echo htmlspecialchars($user['UserName'] . ' ' . $user['UserFamily']); ?>
+                                        </div>
+                                        <div class="card-body">
+                                            <p><strong>نام و نام خانوادگی:</strong> <?php echo htmlspecialchars($user['UserName'] . ' ' . $user['UserFamily']); ?></p>
+                                            <p><strong>نام پدر:</strong> <?php echo htmlspecialchars($user['UserFather'] ?? ''); ?></p>
+                                            <p><strong>تاریخ تولد:</strong> <?php echo htmlspecialchars($user['UserDateBirth'] ?? ''); ?></p>
+                                            <p><strong>کدملی:</strong> <?php echo htmlspecialchars($user['UserMelli'] ?? ''); ?></p>
+                                            <p><strong>کدسیستمی:</strong> <?php echo htmlspecialchars($user['UserSysCode'] ?? ''); ?></p>
+                                            <p><strong>تاریخ صدور:</strong> <?php echo htmlspecialchars($issue_date); ?></p>
+                                            <p><strong>امضاء کننده:</strong> <?php echo htmlspecialchars($signatory); ?></p>
+                                        </div>
+                                    </div>
+                                </div>
                                 <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <?php if (!empty($footer_desc)): ?>
-                    <div class="alert alert-secondary text-center mt-3">
-                        <h5><i class="fas fa-file-alt"></i> توضیحات پایانی:</h5>
-                        <p class="mb-0"><?php echo nl2br(htmlspecialchars($footer_desc)); ?></p>
-                    </div>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <!-- نمایش جدول برای سایر گزارشات -->
+                        <div class="report-result">
+                            <h4 class="text-center mb-4"><?php echo $report_title; ?></h4>
+                            
+                            <?php if (!empty($header_desc)): ?>
+                            <div class="alert alert-info text-center">
+                                <h5><i class="fas fa-heading"></i> توضیحات:</h5>
+                                <p class="mb-0"><?php echo nl2br(htmlspecialchars($header_desc)); ?></p>
+                            </div>
+                            <?php endif; ?>
+                            
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead class="table-dark-custom">
+                                        <tr>
+                                            <th>#</th>
+                                            <?php foreach ($selected_fields as $field): ?>
+                                                <?php $field_name = $users_fields[$field] ?? $field; ?>
+                                                <th><?php echo $field_name; ?></th>
+                                            <?php endforeach; ?>
+                                            <?php if ($report_type === 'attendance' || $report_type === 'class'): ?>
+                                                <th>حضور</th>
+                                                <th>غیبت</th>
+                                                <th>مرخصی</th>
+                                                <th>جمع</th>
+                                            <?php endif; ?>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php $counter = 1; ?>
+                                        <?php foreach ($report_data as $row): ?>
+                                            <tr>
+                                                <td><?php echo $counter++; ?></td>
+                                                <?php foreach ($selected_fields as $field): ?>
+                                                    <td><?php echo htmlspecialchars($row[$field] ?? ''); ?></td>
+                                                <?php endforeach; ?>
+                                                <?php if ($report_type === 'attendance' || $report_type === 'class'): ?>
+                                                    <td><span class="badge bg-success"><?php echo $row['present_count'] ?? 0; ?></span></td>
+                                                    <td><span class="badge bg-danger"><?php echo $row['absent_count'] ?? 0; ?></span></td>
+                                                    <td><span class="badge bg-warning"><?php echo $row['excused_count'] ?? 0; ?></span></td>
+                                                    <td><strong><?php echo ($row['present_count'] ?? 0) + ($row['absent_count'] ?? 0) + ($row['excused_count'] ?? 0); ?></strong></td>
+                                                <?php endif; ?>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <?php if (!empty($footer_desc)): ?>
+                            <div class="alert alert-secondary text-center mt-3">
+                                <h5><i class="fas fa-file-alt"></i> توضیحات پایانی:</h5>
+                                <p class="mb-0"><?php echo nl2br(htmlspecialchars($footer_desc)); ?></p>
+                            </div>
+                            <?php endif; ?>
+                            
+                            <div class="mt-3 text-center text-muted">
+                                <i class="fas fa-info-circle"></i>
+                                تعداد رکوردها: <?php echo count($report_data); ?> |
+                                تاریخ تولید: <?php echo gregorianToShamsi(date('Y-m-d')); ?>
+                            </div>
+                        </div>
                     <?php endif; ?>
-                    
-                    <div class="mt-3 text-center text-muted">
-                        <i class="fas fa-info-circle"></i>
-                        تعداد رکوردها: <?php echo count($report_data); ?> |
-                        تاریخ تولید: <?php echo gregorianToShamsi(date('Y-m-d')); ?>
-                    </div>
-                </div>
                 <?php else: ?>
                     <div class="alert alert-warning text-center">
                         <i class="fas fa-exclamation-triangle fa-2x mb-3"></i><br>
@@ -1485,41 +2078,95 @@ if (isset($_POST['export_pdf']) && !empty($report_data)) {
     
     <script src="../assets/js/bootstrap.bundle.min.js"></script>
     <script>
-        function toggleSelection(type) {
-            const checkbox = document.getElementById(type);
-            checkbox.checked = !checkbox.checked;
-            const card = checkbox.closest('.selection-card');
-            if (checkbox.checked) {
-                card.classList.add('selected');
-            } else {
-                card.classList.remove('selected');
+        // توابع مدیریت انتخاب کاربران
+        let selectedUsers = <?php echo json_encode($selected_user_ids); ?> || [];
+
+        function toggleUser(userId) {
+            const checkbox = document.getElementById('user_' + userId);
+            if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+                updateSelectedUsers(checkbox);
             }
         }
-        
+
+        function updateSelectedUsers(checkbox) {
+            const userId = parseInt(checkbox.value);
+            if (checkbox.checked) {
+                if (!selectedUsers.includes(userId)) {
+                    selectedUsers.push(userId);
+                }
+            } else {
+                selectedUsers = selectedUsers.filter(id => id !== userId);
+            }
+            document.getElementById('selected_user_ids').value = JSON.stringify(selectedUsers);
+            
+            // تغییر ظاهر آیتم
+            const userItem = checkbox.closest('.user-item');
+            if (userItem) {
+                if (checkbox.checked) {
+                    userItem.classList.add('selected');
+                } else {
+                    userItem.classList.remove('selected');
+                }
+            }
+        }
+
+        function removeSelectedUser(userId) {
+            selectedUsers = selectedUsers.filter(id => id !== userId);
+            document.getElementById('selected_user_ids').value = JSON.stringify(selectedUsers);
+            
+            // اگر checkbox مربوطه وجود دارد، unchecked کن
+            const checkbox = document.getElementById('user_' + userId);
+            if (checkbox) {
+                checkbox.checked = false;
+                const userItem = checkbox.closest('.user-item');
+                if (userItem) userItem.classList.remove('selected');
+            }
+            
+            // حذف از نمایش
+            const badge = document.querySelector(`.selected-user-badge[data-id="${userId}"]`);
+            if (badge) badge.remove();
+            
+            // اگر هیچ کاربری باقی نمانده، پیام نمایش بده
+            const selectedList = document.getElementById('selected-users-list');
+            if (selectedList && selectedUsers.length === 0) {
+                selectedList.innerHTML = '<p class="text-muted">هیچ کاربری انتخاب نشده است.</p>';
+            }
+        }
+
+        // تابع برای انتخاب همه
+        function selectAllUsers(selectAllCheckbox) {
+            const checkboxes = document.querySelectorAll('.user-item input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = selectAllCheckbox.checked;
+                updateSelectedUsers(cb);
+            });
+        }
+
         function selectReportType(type) {
             document.getElementById(type).checked = true;
-            // Remove selected class from all cards
             document.querySelectorAll('.selection-card').forEach(card => {
                 card.classList.remove('selected');
             });
-            // Add selected class to clicked card
             document.getElementById(type).closest('.selection-card').classList.add('selected');
         }
-        
-        // Initialize selection cards
+
+        // مقداردهی اولیه
         document.addEventListener('DOMContentLoaded', function() {
-            // Checkboxes
-            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-                const card = checkbox.closest('.selection-card');
-                if (checkbox.checked) {
-                    card.classList.add('selected');
+            document.querySelectorAll('input[type="radio"]').forEach(radio => {
+                if (radio.checked) {
+                    const card = radio.closest('.selection-card');
+                    if (card) card.classList.add('selected');
                 }
             });
             
-            // Radio buttons
-            document.querySelectorAll('input[type="radio"]').forEach(radio => {
-                if (radio.checked) {
-                    radio.closest('.selection-card').classList.add('selected');
+            // اطمینان از هماهنگی UI با selectedUsers
+            selectedUsers.forEach(userId => {
+                const checkbox = document.getElementById('user_' + userId);
+                if (checkbox) {
+                    checkbox.checked = true;
+                    const userItem = checkbox.closest('.user-item');
+                    if (userItem) userItem.classList.add('selected');
                 }
             });
         });
