@@ -94,10 +94,11 @@ $page_title = 'خانه';
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مدیریت نوجوانان و بزرگسالان - <?php echo $page_title; ?></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>پایگاه بسیج - <?php echo $page_title; ?></title>
     <link href="assets/css/bootstrap.rtl.min.css" rel="stylesheet">
-    <link href="assets/css/font-awesome.min.css" rel="stylesheet">
+	<link href="assets/css/font-face.css" rel="stylesheet">
+    <link href="assets/css/fontawesome.min.css" rel="stylesheet">
     <link href="assets/css/style.css" rel="stylesheet">
     <style>
         /* استایل داینامیک برای پس‌زمینه */
@@ -114,91 +115,294 @@ $page_title = 'خانه';
         .main-content {
             background: transparent !important;
             margin-top: 80px;
+            padding-bottom: 80px;
         }
-
-        .content-box {
-            background: rgba(255, 255, 255, 0.95) !important;
-            backdrop-filter: blur(10px) !important;
-            border: 1px solid rgba(255, 255, 255, 0.3) !important;
-            margin: 20px auto;
+        
+        /* استایل آمار پایین سمت چپ */
+        .stats-sidebar {
+            position: fixed;
+            bottom: 70px;
+            left: 20px;
+            z-index: 1050;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
-
-        .welcome-message {
-            text-align: center;
-            padding: 2rem;
-        }
-
-        .welcome-icon {
-            font-size: 4rem;
-            color: #4a6cf7;
-            margin-bottom: 1rem;
-        }
-
-        .welcome-title {
-            font-size: 2.5rem;
-            color: #2c3e50;
-            margin-bottom: 1rem;
-            font-weight: 700;
-        }
-
-        .welcome-text {
-            font-size: 0.8rem;
-            color: #555;
-            line-height: 1.8;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        .quick-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-top: 2rem;
-        }
-
-        .stat-card {
-            background: rgba(255, 255, 255, 0.9);
-            border-radius: 10px;
-            padding: 1.5rem;
-            text-align: center;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            border-left: 4px solid #4a6cf7;
-            transition: transform 0.3s ease;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-5px);
-        }
-
-        .stat-icon {
-            font-size: 2.5rem;
-            color: #4a6cf7;
-            margin-bottom: 1rem;
-        }
-
-        .stat-number {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #2c3e50;
-            margin-bottom: 0.5rem;
-        }
-
-        .stat-label {
-            color: #666;
-            font-size: 1rem;
-        }
-
-        .quick-actions .btn {
-            margin: 5px;
+        
+        .stat-icon-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 50px;
             padding: 12px 20px;
-            font-size: 1rem;
-            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
             transition: all 0.3s ease;
+            cursor: pointer;
+            border-right: 3px solid #4a6cf7;
+            min-width: 200px;
         }
-
-        .quick-actions .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        
+        .stat-icon-card:hover {
+            transform: translateX(-5px);
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .stat-icon-card .icon {
+            font-size: 1.8rem;
+            color: #4a6cf7;
+        }
+        
+        .stat-icon-card .info {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .stat-icon-card .number {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #2c3e50;
+            line-height: 1.2;
+        }
+        
+        .stat-icon-card .label {
+            font-size: 0.8rem;
+            color: #666;
+        }
+        
+        /* استایل دکمه‌های میانبر پایین سمت راست */
+        .actions-sidebar {
+            position: fixed;
+            bottom: 70px;
+            right: 20px;
+            z-index: 1050;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .action-icon-btn {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            position: relative;
+        }
+        
+        .action-icon-btn:hover {
+            transform: scale(1.1);
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .action-icon-btn i {
+            font-size: 1rem;
+            color: #4a6cf7;
+        }
+        
+        /* tooltip برای دکمه‌های میانبر */
+        .action-icon-btn .tooltip-text {
+            visibility: hidden;
+            background-color: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 10px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            right: 50%;
+            transform: translateX(50%);
+            white-space: nowrap;
+            font-size: 0.8rem;
+            font-family: 'Sahel', Tahoma, sans-serif;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        
+        .action-icon-btn .tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            right: 50%;
+            transform: translateX(50%);
+            border-width: 5px;
+            border-style: solid;
+            border-color: rgba(0, 0, 0, 0.85) transparent transparent transparent;
+        }
+        
+        .action-icon-btn:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        /* رنگ‌های متفاوت برای دکمه‌های مختلف */
+        .action-icon-btn.primary i { color: #4a6cf7; }
+        .action-icon-btn.success i { color: #28a745; }
+        .action-icon-btn.secondary i { color: #6c757d; }
+        .action-icon-btn.info i { color: #17a2b8; }
+        .action-icon-btn.warning i { color: #ffc107; }
+        .action-icon-btn.danger i { color: #dc3545; }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .stats-sidebar {
+                bottom: 60px;
+                left: 10px;
+                gap: 8px;
+            }
+            
+            .stat-icon-card {
+                padding: 8px 15px;
+                min-width: 150px;
+            }
+            
+            .stat-icon-card .icon {
+                font-size: 1.3rem;
+            }
+            
+            .stat-icon-card .number {
+                font-size: 1rem;
+            }
+            
+            .stat-icon-card .label {
+                font-size: 0.7rem;
+            }
+            
+            .actions-sidebar {
+                bottom: 60px;
+                right: 10px;
+                gap: 8px;
+            }
+            
+            .action-icon-btn {
+                width: 45px;
+                height: 45px;
+            }
+            
+            .action-icon-btn i {
+                font-size: 1.3rem;
+            }
+            
+            .action-icon-btn .tooltip-text {
+                font-size: 0.7rem;
+                white-space: nowrap;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .stats-sidebar {
+                bottom: 55px;
+                left: 8px;
+                gap: 6px;
+            }
+            
+            .stat-icon-card {
+                padding: 6px 12px;
+                min-width: 130px;
+            }
+            
+            .stat-icon-card .icon {
+                font-size: 1.1rem;
+            }
+            
+            .stat-icon-card .number {
+                font-size: 0.9rem;
+            }
+            
+            .stat-icon-card .label {
+                font-size: 0.65rem;
+            }
+            
+            .actions-sidebar {
+                bottom: 55px;
+                right: 8px;
+                gap: 6px;
+            }
+            
+            .action-icon-btn {
+                width: 40px;
+                height: 40px;
+            }
+            
+            .action-icon-btn i {
+                font-size: 1.1rem;
+            }
+            
+            .main-content {
+                margin-top: 60px;
+                padding-bottom: 70px;
+            }
+        }
+        
+        /* حالت افقی موبایل */
+        @media (max-width: 768px) and (orientation: landscape) {
+            .stats-sidebar {
+                bottom: 50px;
+                flex-direction: row;
+                flex-wrap: wrap;
+                left: 10px;
+                right: auto;
+                gap: 8px;
+            }
+            
+            .stat-icon-card {
+                min-width: auto;
+                padding: 6px 12px;
+            }
+            
+            .actions-sidebar {
+                bottom: 50px;
+                flex-direction: row;
+                flex-wrap: wrap;
+                right: 10px;
+                gap: 8px;
+            }
+            
+            .action-icon-btn {
+                width: 40px;
+                height: 40px;
+            }
+        }
+        
+        /* صفحه اصلی خالی */
+        .welcome-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: calc(100vh - 160px);
+            text-align: center;
+        }
+        
+        .welcome-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            max-width: 500px;
+            margin: 0 auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        .welcome-card h2 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+        
+        .welcome-card p {
+            color: #666;
+            line-height: 1.6;
         }
     </style>
 </head>
@@ -206,119 +410,101 @@ $page_title = 'خانه';
     <?php include 'includes/header.php'; ?>
 
     <div class="main-content">
-        <div class="content-box">
-                <div class="welcome-message">
-                    <div class="welcome-icon">
-                        <i class="fas fa-tachometer-alt"></i>
-                    </div>
-                    <h1 class="welcome-title">به مدیریت نوجوانان و بزرگسالان خوش آمدید</h1>
-                    <p class="welcome-text">
-                        این سیستم امکان مدیریت نوجوانان، بزرگسالان(برای ثبت نام - حضور و غیاب - دوره های آموزشی) را فراهم می‌کند.
-                    </p>
-
-                    <!-- آمار سریع -->
-                    <div class="quick-stats">
-                        <div class="stat-card">
-                            <div class="stat-icon">
-                                <i class="fas fa-users"></i>
-                            </div>
-                            <div class="stat-number" id="teen-count">0</div>
-                            <div class="stat-label">نوجوانان ثبت‌نام شده</div>
-                        </div>
-
-                        <div class="stat-card">
-                            <div class="stat-icon">
-                                <i class="fas fa-user-friends"></i>
-                            </div>
-                            <div class="stat-number" id="adult-count">0</div>
-                            <div class="stat-label">بزرگسالان ثبت‌نام شده</div>
-                        </div>
-
-                        <div class="stat-card">
-                            <div class="stat-icon">
-                                <i class="fas fa-book"></i>
-                            </div>
-                            <div class="stat-number" id="course-count">0</div>
-                            <div class="stat-label">دوره‌های فعال</div>
-                        </div>
-
-                        <div class="stat-card">
-                            <div class="stat-icon">
-                                <i class="fas fa-calendar-check"></i>
-                            </div>
-                            <div class="stat-number" id="attendance-count">0</div>
-                            <div class="stat-label">حضور و غیاب امروز</div>
-                        </div>
-                    </div>
-
-                    <!-- دکمه‌های سریع -->
-                    <div class="quick-actions mt-4">
-                        <div class="row g-3 justify-content-center">
-                            <?php if (isManagerOrAbove()): ?>
-                            <div class="col-md-3 col-sm-6">
-                                <a href="includes/regsiteruser.php" class="btn btn-primary btn-lg w-100">
-                                    <i class="fas fa-user-plus"></i>
-                                    ثبت نام کاربران
-                                </a>
-								<a href="includes/listuser.php" class="btn btn-primary btn-lg w-100">
-                                    <i class="fas fa-user-plus"></i>
-                                    لیست کاربران
-                                </a>
-                            </div>
-                            <?php endif; ?>
-                            <div class="col-md-3 col-sm-6">
-                                <a href="includes/exceluser.php" class="btn btn-success btn-lg w-100">
-                                    <i class="fas fa-clipboard-check"></i>
-                                    ثبت نام اکسل
-                                </a>
-								<a href="includes/rollcalluser.php" class="btn btn-secondary btn-lg w-100">
-                                    <i class="fas fa-user-check"></i>
-                                    حضور و غیاب کاربران
-                                </a>
-                            </div>
-                            <?php if (isManagerOrAbove()): ?>
-                            <div class="col-md-3 col-sm-6">
-                                <a href="includes/class.php" class="btn btn-info btn-lg w-100">
-                                    <i class="fas fa-book"></i>
-                                    مدیریت دوره‌ها
-                                </a>
-								<a href="includes/reportall.php" class="btn btn-info btn-lg w-100">
-                                    <i class="fas fa-book"></i>
-                                    گزارشات
-                                </a>
-                            </div>
-                            <?php endif; ?>
-                            <?php if (isAdmin()): ?>
-                            <div class="col-md-3 col-sm-6">
-                                <a href="includes/settingadmin.php" class="btn btn-warning btn-lg w-100">
-                                    <i class="fas fa-cog"></i>
-                                    تنظیمات سیستم
-                                </a>
-								<a href="includes/backuprestore.php" class="btn btn-warning btn-lg w-100">
-                                    <i class="fas fa-cog"></i>
-                                    پشتیبان گیری و بازیابی
-                                </a>
-                            </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
+        <div class="welcome-container">
+            <div class="welcome-card">
+                <i class="fas fa-tachometer-alt" style="font-size: 3rem; color: #4a6cf7; margin-bottom: 0.1rem;"></i>
+                <h4>سیستم مدیریت پایگاه بسیج شهید</h4>
+				<p></p>
+                <small class="text-muted">برای دسترسی به امکانات، از دکمه‌های میانبر سمت راست استفاده کنید</small>
             </div>
         </div>
+    </div>
+
+    <!-- آمار پایین سمت چپ -->
+    <div class="stats-sidebar">
+        <div class="stat-icon-card">
+            <div class="icon">
+                <i class="fas fa-users"></i>
+            </div>
+            <div class="info">
+                <div class="number"><?php echo $teenCount; ?></div>
+                <div class="label">نوجوان</div>
+            </div>
+        </div>
+        
+        <div class="stat-icon-card">
+            <div class="icon">
+                <i class="fas fa-user-friends"></i>
+            </div>
+            <div class="info">
+                <div class="number"><?php echo $adultCount; ?></div>
+                <div class="label">بزرگسال</div>
+            </div>
+        </div>
+        
+        <div class="stat-icon-card">
+            <div class="icon">
+                <i class="fas fa-book"></i>
+            </div>
+            <div class="info">
+                <div class="number"><?php echo $activeClassesCount; ?></div>
+                <div class="label">دوره‌ها</div>
+            </div>
+        </div>
+        
+        <div class="stat-icon-card">
+            <div class="icon">
+                <i class="fas fa-calendar-check"></i>
+            </div>
+            <div class="info">
+                <div class="number"><?php echo $todayAttendanceCount; ?></div>
+                <div class="label">حضور و غیاب</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- دکمه‌های میانبر پایین سمت راست -->
+    <div class="actions-sidebar">
+        <?php if (isManagerOrAbove()): ?>
+        <a href="includes/regsiteruser.php" class="action-icon-btn primary">
+            <i class="fas fa-user-plus"></i>
+            <span class="tooltip-text">ثبت نام</span>
+        </a>
+        <a href="includes/listuser.php" class="action-icon-btn primary">
+            <i class="fas fa-list"></i>
+            <span class="tooltip-text">لیست کاربران</span>
+        </a>
+        <?php endif; ?>
+        
+        <a href="includes/exceluser.php" class="action-icon-btn success">
+            <i class="fas fa-file-excel"></i>
+            <span class="tooltip-text">ثبت نام اکسل</span>
+        </a>
+        
+        <a href="includes/rollcalluser.php" class="action-icon-btn secondary">
+            <i class="fas fa-user-check"></i>
+            <span class="tooltip-text">حضور و غیاب</span>
+        </a>
+        
+        <?php if (isManagerOrAbove()): ?>
+        <a href="includes/class.php" class="action-icon-btn info">
+            <i class="fas fa-book"></i>
+            <span class="tooltip-text">دوره‌ها</span>
+        </a>
+        <a href="includes/reportall.php" class="action-icon-btn info">
+            <i class="fas fa-chart-bar"></i>
+            <span class="tooltip-text">گزارشات</span>
+        </a>
+        <?php endif; ?>
+        
     </div>
 
     <?php include 'includes/footer.php'; ?>
     
     <script src="assets/js/bootstrap.bundle.min.js"></script>
+	<script src="assets/js/fontawesome.min.js"></script>
+	
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Set the actual values from PHP variables
-            document.getElementById('teen-count').textContent = <?php echo $teenCount; ?>;
-            document.getElementById('adult-count').textContent = <?php echo $adultCount; ?>;
-            document.getElementById('course-count').textContent = <?php echo $activeClassesCount; ?>;
-            document.getElementById('attendance-count').textContent = <?php echo $todayAttendanceCount; ?>;
-        });
-
         // به‌روزرسانی تاریخ و زمان
         function updatePersianDateTime() {
             const now = new Date();
